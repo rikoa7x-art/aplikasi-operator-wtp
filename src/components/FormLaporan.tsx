@@ -3,6 +3,7 @@ import type { CatatanWaktu } from '../types';
 import { SLOTS, getHariOperasi, getCurrentSlot } from '../types';
 import { useAuth } from '../AuthContext';
 import { addCatatan, getCatatan, saveCatatan, generateId } from '../storage';
+import { uploadToCloudinary } from '../cloudinary';
 
 interface Props {
     initialSlot?: number;
@@ -16,13 +17,14 @@ const toNum = (s: string): number | '' => {
     return isNaN(n) ? '' : n;
 };
 
-/** Kompres & tambahkan timestamp pada gambar menggunakan Canvas */
+/** Kompres & cetak timestamp pada gambar menggunakan Canvas */
 async function processPhoto(file: File, slotJam: string, tanggal: string): Promise<string> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const img = new Image();
         const url = URL.createObjectURL(file);
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Gagal membaca gambar')); };
         img.onload = () => {
-            // Resize max 1200px untuk hemat storage
+            // Resize max 1200px
             const MAX = 1200;
             let w = img.width;
             let h = img.height;
@@ -35,7 +37,7 @@ async function processPhoto(file: File, slotJam: string, tanggal: string): Promi
             const ctx = canvas.getContext('2d')!;
             ctx.drawImage(img, 0, 0, w, h);
 
-            // Timestamp: jam slot + waktu aktual + tanggal
+            // Timestamp
             const now = new Date();
             const waktuFoto = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const tglFoto = new Date(tanggal + 'T08:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -43,11 +45,10 @@ async function processPhoto(file: File, slotJam: string, tanggal: string): Promi
             const line2 = tglFoto;
 
             const fontSize = Math.max(14, Math.round(w / 28));
-            const padding = Math.round(fontSize * 0.7);
-            const lineH = fontSize + padding;
-            const boxH = lineH * 2 + padding * 1.5;
+            const padding  = Math.round(fontSize * 0.7);
+            const lineH    = fontSize + padding;
+            const boxH     = lineH * 2 + padding * 1.5;
 
-            // Background strip bawah
             const grad = ctx.createLinearGradient(0, h - boxH - 10, 0, h);
             grad.addColorStop(0, 'rgba(0,0,0,0)');
             grad.addColorStop(0.3, 'rgba(0,0,0,0.75)');
@@ -55,7 +56,6 @@ async function processPhoto(file: File, slotJam: string, tanggal: string): Promi
             ctx.fillStyle = grad;
             ctx.fillRect(0, h - boxH - 10, w, boxH + 10);
 
-            // Teks
             ctx.font = `bold ${fontSize}px Arial, sans-serif`;
             ctx.fillStyle = '#ffffff';
             ctx.shadowColor = 'rgba(0,0,0,0.8)';
@@ -73,6 +73,8 @@ async function processPhoto(file: File, slotJam: string, tanggal: string): Promi
     });
 }
 
+type FotoStatus = 'idle' | 'processing' | 'uploading' | 'done' | 'error';
+
 export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel }: Props) {
     const { user } = useAuth();
     const hariOperasi = getHariOperasi();
@@ -87,8 +89,13 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
     const [dosisKaporit, setDosisKaporit] = useState(existing?.dosisKaporit?.toString() ?? '');
     const [dosisPolimer, setDosisPolimer] = useState(existing?.dosisPolimer?.toString() ?? '');
     const [catatan, setCatatan] = useState(existing?.catatan ?? '');
-    const [foto, setFoto] = useState<string | undefined>(existing?.foto);
-    const [fotoLoading, setFotoLoading] = useState(false);
+
+    // Foto state
+    const [foto, setFoto] = useState<string | undefined>(existing?.foto);   // URL Cloudinary
+    const [fotoPreview, setFotoPreview] = useState<string | undefined>(existing?.foto); // preview lokal
+    const [fotoStatus, setFotoStatus] = useState<FotoStatus>('idle');
+    const [fotoError, setFotoError] = useState('');
+
     const [success, setSuccess] = useState(false);
 
     const selectedSlot = SLOTS.find(s => s.slot === slot)!;
@@ -96,20 +103,42 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
     const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        setFotoLoading(true);
+        if (fileRef.current) fileRef.current.value = '';
+
+        setFotoError('');
+        setFoto(undefined);
+
         try {
-            const result = await processPhoto(file, selectedSlot.jam, tanggal);
-            setFoto(result);
-        } catch {
-            alert('Gagal memproses foto. Coba lagi.');
-        } finally {
-            setFotoLoading(false);
-            if (fileRef.current) fileRef.current.value = '';
+            // Tahap 1: Proses Canvas (tambah timestamp)
+            setFotoStatus('processing');
+            const base64 = await processPhoto(file, selectedSlot.jam, tanggal);
+            setFotoPreview(base64); // tampilkan preview segera
+
+            // Tahap 2: Upload ke Cloudinary
+            setFotoStatus('uploading');
+            const cloudUrl = await uploadToCloudinary(base64);
+            setFoto(cloudUrl);       // simpan URL Cloudinary
+            setFotoStatus('done');
+
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Upload gagal';
+            setFotoError(msg);
+            setFotoStatus('error');
+            setFotoPreview(undefined);
         }
+    };
+
+    const removeFoto = () => {
+        setFoto(undefined);
+        setFotoPreview(undefined);
+        setFotoStatus('idle');
+        setFotoError('');
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (fotoStatus === 'processing' || fotoStatus === 'uploading') return; // tunggu upload selesai
+
         const all = getCatatan();
         const data: CatatanWaktu = {
             id: existing?.id ?? generateId(),
@@ -125,7 +154,7 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
             dosisKaporit: toNum(dosisKaporit),
             dosisPolimer: toNum(dosisPolimer),
             catatan,
-            foto,
+            foto, // URL Cloudinary atau undefined
         };
         if (existing) {
             const idx = all.findIndex(c => c.id === existing.id);
@@ -156,10 +185,13 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
         </div>
     );
 
+    const isUploading = fotoStatus === 'processing' || fotoStatus === 'uploading';
+    const uploadLabel = fotoStatus === 'processing' ? 'Memproses foto...' : 'Upload ke Cloudinary...';
+
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
 
-            {/* Slot selector */}
+            {/* Slot */}
             <div>
                 <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Pilih Jam</label>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -207,68 +239,98 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
 
             {/* Upload Foto */}
             <div className="bg-slate-800/60 rounded-2xl border border-violet-500/20 p-4">
-                <p className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-3">Foto Lapangan</p>
+                <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-wider">Foto Lapangan</p>
+                    {fotoStatus === 'done' && (
+                        <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            Tersimpan di Cloudinary
+                        </span>
+                    )}
+                </div>
 
-                {/* Hidden file input */}
-                <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleFotoChange}
-                    className="hidden"
-                />
+                <input ref={fileRef} type="file" accept="image/*" capture="environment"
+                    onChange={handleFotoChange} className="hidden" />
 
-                {foto ? (
-                    /* Preview foto dengan timestamp */
+                {/* Loading state */}
+                {isUploading && (
+                    <div className="flex flex-col items-center justify-center py-8 gap-3">
+                        <div className="relative w-12 h-12">
+                            <svg className="w-12 h-12 text-violet-500/20" fill="none" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            </svg>
+                            <svg className="w-12 h-12 text-violet-400 animate-spin absolute inset-0" fill="none" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75" />
+                            </svg>
+                        </div>
+                        {fotoPreview && (
+                            <img src={fotoPreview} alt="preview" className="w-full max-h-32 object-cover rounded-xl opacity-50" />
+                        )}
+                        <div className="text-center">
+                            <p className="text-violet-300 text-sm font-semibold">{uploadLabel}</p>
+                            {fotoStatus === 'uploading' && (
+                                <p className="text-slate-500 text-xs mt-0.5">Mohon tunggu...</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Error state */}
+                {fotoStatus === 'error' && (
+                    <div className="space-y-3">
+                        <div className="flex gap-2 items-start bg-red-500/10 border border-red-500/30 rounded-2xl px-4 py-3">
+                            <svg className="w-4 h-4 text-red-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <p className="text-red-400 text-xs leading-relaxed">{fotoError}</p>
+                        </div>
+                        <button type="button" onClick={() => fileRef.current?.click()}
+                            className="w-full py-2.5 text-violet-400 border border-violet-500/30 rounded-xl text-xs font-medium active:bg-violet-500/10 transition">
+                            Coba Lagi
+                        </button>
+                    </div>
+                )}
+
+                {/* Preview foto setelah upload berhasil */}
+                {fotoStatus === 'done' && fotoPreview && !isUploading && (
                     <div className="space-y-2">
-                        <div className="relative rounded-2xl overflow-hidden">
-                            <img src={foto} alt="Foto lapangan" className="w-full object-cover rounded-2xl max-h-60" />
-                            {/* Badge timestamp sudah di dalam gambar */}
+                        <div className="rounded-2xl overflow-hidden border border-violet-500/30">
+                            <img src={fotoPreview} alt="Foto lapangan" className="w-full object-cover max-h-56" />
                         </div>
                         <div className="flex gap-2">
                             <button type="button" onClick={() => fileRef.current?.click()}
-                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-slate-700/60 border border-slate-600/50 rounded-xl text-slate-300 text-xs font-medium active:bg-slate-700 transition">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-700/60 border border-slate-600/50 rounded-xl text-slate-300 text-xs font-medium active:bg-slate-700 transition">
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
                                 Ganti Foto
                             </button>
-                            <button type="button" onClick={() => setFoto(undefined)}
+                            <button type="button" onClick={removeFoto}
                                 className="px-4 py-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs font-medium active:bg-red-500/20 transition">
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                             </button>
                         </div>
                     </div>
-                ) : (
-                    /* Tombol upload / kamera */
+                )}
+
+                {/* Idle — tombol upload/kamera */}
+                {fotoStatus === 'idle' && (
                     <button type="button" onClick={() => fileRef.current?.click()}
-                        disabled={fotoLoading}
-                        className="w-full flex flex-col items-center justify-center gap-2.5 py-8 rounded-2xl border-2 border-dashed border-violet-500/30 bg-violet-500/5 active:bg-violet-500/10 transition disabled:opacity-50">
-                        {fotoLoading ? (
-                            <>
-                                <svg className="w-8 h-8 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                </svg>
-                                <p className="text-violet-300 text-sm font-medium">Memproses foto...</p>
-                            </>
-                        ) : (
-                            <>
-                                <div className="w-12 h-12 rounded-2xl bg-violet-500/15 flex items-center justify-center">
-                                    <svg className="w-6 h-6 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-violet-300 text-sm font-semibold">Ambil / Upload Foto</p>
-                                    <p className="text-slate-500 text-xs mt-0.5">Jam pengambilan otomatis tercetak</p>
-                                </div>
-                            </>
-                        )}
+                        className="w-full flex flex-col items-center justify-center gap-2.5 py-8 rounded-2xl border-2 border-dashed border-violet-500/30 bg-violet-500/5 active:bg-violet-500/10 transition">
+                        <div className="w-12 h-12 rounded-2xl bg-violet-500/15 flex items-center justify-center">
+                            <svg className="w-6 h-6 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-violet-300 text-sm font-semibold">Ambil / Upload Foto</p>
+                            <p className="text-slate-500 text-xs mt-0.5">Jam tercetak otomatis · Disimpan di Cloudinary</p>
+                        </div>
                     </button>
                 )}
             </div>
@@ -287,9 +349,9 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
                     className="flex-1 py-4 text-slate-400 border border-slate-700 rounded-2xl active:bg-slate-800 text-sm font-medium transition">
                     Batal
                 </button>
-                <button type="submit"
-                    className="flex-[2] py-4 bg-blue-600 active:bg-blue-700 text-white font-bold rounded-2xl transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20">
-                    Simpan Data
+                <button type="submit" disabled={isUploading}
+                    className="flex-[2] py-4 bg-blue-600 active:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-2xl transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20">
+                    {isUploading ? 'Menunggu foto...' : 'Simpan Data'}
                 </button>
             </div>
         </form>
