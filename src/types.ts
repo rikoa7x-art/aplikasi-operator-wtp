@@ -74,4 +74,5 @@ export interface CatatanWaktu {
     dosisPolimer: number | '';  // gr/menit
 
     catatan: string;
+    foto?: string; // base64 data URL dengan timestamp
 }

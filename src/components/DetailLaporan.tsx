@@ -75,6 +75,16 @@ export default function DetailCatatan({ catatan: c, onClose }: Props) {
                 </div>
             )}
 
+            {/* Foto Lapangan */}
+            {c.foto && (
+                <div className="mb-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-2">Foto Lapangan</p>
+                    <div className="rounded-2xl overflow-hidden border border-violet-500/20">
+                        <img src={c.foto} alt="Foto lapangan" className="w-full object-cover" />
+                    </div>
+                </div>
+            )}
+
             <button onClick={onClose}
                 className="w-full py-3.5 bg-slate-800 active:bg-slate-700 text-slate-300 font-medium rounded-2xl transition text-sm mt-1">
                 Tutup
