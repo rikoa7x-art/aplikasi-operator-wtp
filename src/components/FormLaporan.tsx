@@ -11,18 +11,26 @@ interface Props {
     onCancel: () => void;
 }
 
+// Konversi string ke number | '' untuk disimpan
+const toNum = (s: string): number | '' => {
+    const n = parseFloat(s);
+    return isNaN(n) ? '' : n;
+};
+
 export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel }: Props) {
     const { user } = useAuth();
     const hariOperasi = getHariOperasi();
 
     const [slot, setSlot] = useState<number>(existing?.slot ?? initialSlot ?? getCurrentSlot());
     const [tanggal, setTanggal] = useState(existing?.tanggal ?? hariOperasi);
-    const [kekeruhanAirBaku, setKekeruhanAirBaku] = useState<number | ''>(existing?.kekeruhanAirBaku ?? '');
-    const [debit, setDebit] = useState<number | ''>(existing?.debit ?? '');
-    const [kekeruhanOlahan, setKekeruhanOlahan] = useState<number | ''>(existing?.kekeruhanOlahan ?? '');
-    const [dosisPAC, setDosisPAC] = useState<number | ''>(existing?.dosisPAC ?? '');
-    const [dosisKaporit, setDosisKaporit] = useState<number | ''>(existing?.dosisKaporit ?? '');
-    const [dosisPolimer, setDosisPolimer] = useState<number | ''>(existing?.dosisPolimer ?? '');
+
+    // Simpan sebagai string agar keyboard tidak hilang saat mengetik
+    const [kekeruhanAirBaku, setKekeruhanAirBaku] = useState(existing?.kekeruhanAirBaku?.toString() ?? '');
+    const [debit, setDebit] = useState(existing?.debit?.toString() ?? '');
+    const [kekeruhanOlahan, setKekeruhanOlahan] = useState(existing?.kekeruhanOlahan?.toString() ?? '');
+    const [dosisPAC, setDosisPAC] = useState(existing?.dosisPAC?.toString() ?? '');
+    const [dosisKaporit, setDosisKaporit] = useState(existing?.dosisKaporit?.toString() ?? '');
+    const [dosisPolimer, setDosisPolimer] = useState(existing?.dosisPolimer?.toString() ?? '');
     const [catatan, setCatatan] = useState(existing?.catatan ?? '');
     const [success, setSuccess] = useState(false);
 
@@ -38,8 +46,12 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
             operatorId: user!.id,
             operatorNama: user!.nama,
             createdAt: new Date().toISOString(),
-            kekeruhanAirBaku, debit, kekeruhanOlahan,
-            dosisPAC, dosisKaporit, dosisPolimer,
+            kekeruhanAirBaku: toNum(kekeruhanAirBaku),
+            debit: toNum(debit),
+            kekeruhanOlahan: toNum(kekeruhanOlahan),
+            dosisPAC: toNum(dosisPAC),
+            dosisKaporit: toNum(dosisKaporit),
+            dosisPolimer: toNum(dosisPolimer),
             catatan,
         };
         if (existing) {
@@ -55,14 +67,22 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
         setTimeout(() => { setSuccess(false); onSuccess(); }, 900);
     };
 
+    // Input angka — type="text" + inputMode="decimal" agar keyboard tidak hilang di HP
     const Num = ({ label, value, setter, unit, ring = 'focus:ring-blue-500' }:
-        { label: string; value: number | ''; setter: (v: number | '') => void; unit: string; ring?: string }) => (
+        { label: string; value: string; setter: (v: string) => void; unit: string; ring?: string }) => (
         <div>
             <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
             <div className="relative">
                 <input
-                    type="number" inputMode="decimal" step="any" min="0" value={value}
-                    onChange={e => setter(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9.]*"
+                    value={value}
+                    onChange={e => {
+                        // Hanya izinkan angka dan titik desimal
+                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                        setter(val);
+                    }}
                     className={`w-full px-4 py-3.5 pr-16 bg-slate-700/60 border border-slate-600/60 rounded-2xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 ${ring} transition`}
                     placeholder="0"
                 />

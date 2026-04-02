@@ -71,11 +71,7 @@ export default function AdminPage() {
             {/* Header */}
             <header className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 pt-4 pb-3 flex items-center justify-between sticky top-0 z-20">
                 <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center">
-                        <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3c-4.97 5.24-7 8.78-7 11a7 7 0 0014 0c0-2.22-2.03-5.76-7-11z" />
-                        </svg>
-                    </div>
+                    <img src="/logo.png" alt="Logo WTP" className="w-9 h-9 rounded-xl object-contain bg-white/5" />
                     <div>
                         <p className="text-white font-semibold text-sm leading-none">Admin WTP</p>
                         <p className="text-amber-400 text-xs mt-0.5">Administrator</p>
