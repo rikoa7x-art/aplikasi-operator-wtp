@@ -1,8 +1,9 @@
-import type { User, CatatanWaktu } from './types';
+import type { User, CatatanWaktu, LaporanMingguan } from './types';
 
-const USERS_KEY   = 'wtp_users';
-const CATATAN_KEY = 'wtp_catatan';
-const SESSION_KEY = 'wtp_session';
+const USERS_KEY    = 'wtp_users';
+const CATATAN_KEY  = 'wtp_catatan';
+const MINGGUAN_KEY = 'wtp_mingguan';
+const SESSION_KEY  = 'wtp_session';
 
 const defaultUsers: User[] = [
     { id: 'u0', username: 'admin', password: 'admin123', nama: 'Administrator', role: 'admin' },
@@ -35,7 +36,7 @@ export function login(username: string, password: string): User | null {
     return u ?? null;
 }
 
-// --- Catatan Waktu ---
+// --- Catatan Waktu (per 2 jam) ---
 export function getCatatan(): CatatanWaktu[] {
     const raw = localStorage.getItem(CATATAN_KEY);
     if (!raw) return [];
@@ -45,4 +46,16 @@ export function saveCatatan(list: CatatanWaktu[]): void { localStorage.setItem(C
 export function addCatatan(c: CatatanWaktu): void { const list = getCatatan(); list.push(c); saveCatatan(list); }
 export function deleteCatatan(id: string): void { saveCatatan(getCatatan().filter(c => c.id !== id)); }
 export function getCatatanByTanggal(tanggal: string): CatatanWaktu[] { return getCatatan().filter(c => c.tanggal === tanggal); }
+
+// --- Laporan Mingguan ---
+export function getMingguan(): LaporanMingguan[] {
+    const raw = localStorage.getItem(MINGGUAN_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+}
+export function saveMingguan(list: LaporanMingguan[]): void { localStorage.setItem(MINGGUAN_KEY, JSON.stringify(list)); }
+export function addMingguan(m: LaporanMingguan): void { const list = getMingguan(); list.push(m); saveMingguan(list); }
+export function deleteMingguan(id: string): void { saveMingguan(getMingguan().filter(m => m.id !== id)); }
+
+// --- Utility ---
 export function generateId(): string { return Date.now().toString(36) + Math.random().toString(36).slice(2); }

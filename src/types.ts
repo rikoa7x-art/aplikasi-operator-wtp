@@ -54,6 +54,7 @@ export function getCurrentSlot(): number {
     return 12;
 }
 
+/** Data pencatatan tiap 2 jam */
 export interface CatatanWaktu {
     id: string;
     tanggal: string;      // YYYY-MM-DD (hari operasi)
@@ -63,16 +64,61 @@ export interface CatatanWaktu {
     operatorNama: string;
     createdAt: string;
 
-    // Data utama
-    kekeruhanAirBaku: number | '';  // NTU
-    debit: number | '';             // L/detik
-    kekeruhanOlahan: number | '';   // NTU
-
-    // Dosis bahan kimia
-    dosisPAC: number | '';      // gr/menit
-    dosisKaporit: number | '';  // gr/menit
-    dosisPolimer: number | '';  // gr/menit
+    // 4 data utama
+    debitProduksi: number | '';      // L/detik
+    ntuAirBaku: number | '';         // NTU
+    dosisPAC: number | '';           // gr/menit
+    ntuOlahan: number | '';          // NTU setelah pengolahan
 
     catatan: string;
-    foto?: string; // base64 data URL dengan timestamp
+    foto?: string;  // URL Cloudinary
+}
+
+/** Laporan mingguan — pemakaian & sisa bahan kimia */
+export interface LaporanMingguan {
+    id: string;
+    mingguKe: string;       // "2026-W14" format ISO week
+    tanggalMulai: string;   // YYYY-MM-DD (Senin)
+    tanggalAkhir: string;   // YYYY-MM-DD (Minggu)
+    operatorId: string;
+    operatorNama: string;
+    createdAt: string;
+
+    // Pemakaian bahan kimia (kg)
+    pemakaianPAC: number | '';
+    pemakaianKaporit: number | '';
+    pemakaianPolimer: number | '';
+
+    // Sisa / stok bahan kimia (kg)
+    sisaPAC: number | '';
+    sisaKaporit: number | '';
+    sisaPolimer: number | '';
+
+    catatan: string;
+}
+
+/** Menghitung ISO week string "YYYY-Www" dari tanggal */
+export function getISOWeek(d: Date): string {
+    const date = new Date(d.getTime());
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+    const week1 = new Date(date.getFullYear(), 0, 4);
+    const weekNum = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+    return `${date.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+/** Tanggal Senin dan Minggu dari minggu saat ini */
+export function getCurrentWeekRange(): { mulai: string; akhir: string; mingguKe: string } {
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMon = day === 0 ? -6 : 1 - day;
+    const senin = new Date(now);
+    senin.setDate(now.getDate() + diffToMon);
+    const minggu = new Date(senin);
+    minggu.setDate(senin.getDate() + 6);
+    return {
+        mulai: senin.toISOString().split('T')[0],
+        akhir: minggu.toISOString().split('T')[0],
+        mingguKe: getISOWeek(now),
+    };
 }
