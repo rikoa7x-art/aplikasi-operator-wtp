@@ -14,6 +14,27 @@ interface Props {
 
 const toNum = (s: string): number | '' => { const n = parseFloat(s); return isNaN(n) ? '' : n; };
 
+// Komponen Num harus di LUAR fungsi utama agar keyboard HP tidak hilang saat mengetik
+function NumInput({ label, value, setter, unit }: { label: string; value: string; setter: (v: string) => void; unit: string }) {
+    return (
+        <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
+            <div className="relative">
+                <input
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9.]*"
+                    value={value}
+                    onChange={e => setter(e.target.value.replace(/[^0-9.]/g, ''))}
+                    className="w-full px-4 py-3.5 pr-16 bg-slate-700/60 border border-slate-600/60 rounded-2xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder="0"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">{unit}</span>
+            </div>
+        </div>
+    );
+}
+
 async function processPhoto(file: File, slotJam: string, tanggal: string): Promise<string> {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -131,19 +152,6 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
         }
     };
 
-    const Num = ({ label, value, setter, unit }: { label: string; value: string; setter: (v: string) => void; unit: string }) => (
-        <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
-            <div className="relative">
-                <input type="text" inputMode="decimal" pattern="[0-9.]*" value={value}
-                    onChange={e => setter(e.target.value.replace(/[^0-9.]/g, ''))}
-                    className="w-full px-4 py-3.5 pr-16 bg-slate-700/60 border border-slate-600/60 rounded-2xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                    placeholder="0" />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">{unit}</span>
-            </div>
-        </div>
-    );
-
     const isUploading = fotoStatus === 'processing' || fotoStatus === 'uploading';
 
     return (
@@ -173,10 +181,10 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
             {/* 4 Data Utama */}
             <div className="bg-slate-800/60 rounded-2xl border border-cyan-500/20 p-4 space-y-3">
                 <p className="text-xs font-bold text-cyan-400 uppercase tracking-wider">Data Operasi</p>
-                <Num label="Debit Produksi" value={debitProduksi} setter={setDebitProduksi} unit="L/dtk" />
-                <Num label="NTU Air Baku" value={ntuAirBaku} setter={setNtuAirBaku} unit="NTU" />
-                <Num label="Dosis PAC" value={dosisPAC} setter={setDosisPAC} unit="gr/mnt" />
-                <Num label="NTU Setelah Pengolahan" value={ntuOlahan} setter={setNtuOlahan} unit="NTU" />
+                <NumInput label="Debit Produksi" value={debitProduksi} setter={setDebitProduksi} unit="L/dtk" />
+                <NumInput label="NTU Air Baku" value={ntuAirBaku} setter={setNtuAirBaku} unit="NTU" />
+                <NumInput label="Dosis PAC" value={dosisPAC} setter={setDosisPAC} unit="gr/mnt" />
+                <NumInput label="NTU Setelah Pengolahan" value={ntuOlahan} setter={setNtuOlahan} unit="NTU" />
             </div>
 
             {/* Catatan */}

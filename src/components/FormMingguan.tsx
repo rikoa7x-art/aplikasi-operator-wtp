@@ -12,6 +12,29 @@ interface Props {
 
 const toNum = (s: string): number | '' => { const n = parseFloat(s); return isNaN(n) ? '' : n; };
 
+// Komponen NumInput harus di LUAR fungsi utama agar keyboard HP tidak hilang saat mengetik
+function NumInput({ label, value, setter, unit, color = 'focus:ring-amber-500' }: {
+    label: string; value: string; setter: (v: string) => void; unit: string; color?: string;
+}) {
+    return (
+        <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
+            <div className="relative">
+                <input
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9.]*"
+                    value={value}
+                    onChange={e => setter(e.target.value.replace(/[^0-9.]/g, ''))}
+                    className={`w-full px-4 py-3.5 pr-12 bg-slate-700/60 border border-slate-600/60 rounded-2xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 ${color} transition`}
+                    placeholder="0"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">{unit}</span>
+            </div>
+        </div>
+    );
+}
+
 export default function FormMingguan({ existing, onSuccess, onCancel }: Props) {
     const { user } = useAuth();
     const week = getCurrentWeekRange();
@@ -60,19 +83,6 @@ export default function FormMingguan({ existing, onSuccess, onCancel }: Props) {
         }
     };
 
-    const Num = ({ label, value, setter, unit, color = 'focus:ring-amber-500' }: { label: string; value: string; setter: (v: string) => void; unit: string; color?: string }) => (
-        <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
-            <div className="relative">
-                <input type="text" inputMode="decimal" pattern="[0-9.]*" value={value}
-                    onChange={e => setter(e.target.value.replace(/[^0-9.]/g, ''))}
-                    className={`w-full px-4 py-3.5 pr-12 bg-slate-700/60 border border-slate-600/60 rounded-2xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 ${color} transition`}
-                    placeholder="0" />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">{unit}</span>
-            </div>
-        </div>
-    );
-
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             {/* Periode Minggu */}
@@ -85,17 +95,17 @@ export default function FormMingguan({ existing, onSuccess, onCancel }: Props) {
             {/* Pemakaian Bahan Kimia */}
             <div className="bg-slate-800/60 rounded-2xl border border-emerald-500/20 p-4 space-y-3">
                 <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Pemakaian Bahan Kimia</p>
-                <Num label="Pemakaian PAC" value={pemakaianPAC} setter={setPemakaianPAC} unit="kg" color="focus:ring-emerald-500" />
-                <Num label="Pemakaian Kaporit" value={pemakaianKaporit} setter={setPemakaianKaporit} unit="kg" color="focus:ring-emerald-500" />
-                <Num label="Pemakaian Polimer" value={pemakaianPolimer} setter={setPemakaianPolimer} unit="kg" color="focus:ring-emerald-500" />
+                <NumInput label="Pemakaian PAC" value={pemakaianPAC} setter={setPemakaianPAC} unit="kg" color="focus:ring-emerald-500" />
+                <NumInput label="Pemakaian Kaporit" value={pemakaianKaporit} setter={setPemakaianKaporit} unit="kg" color="focus:ring-emerald-500" />
+                <NumInput label="Pemakaian Polimer" value={pemakaianPolimer} setter={setPemakaianPolimer} unit="kg" color="focus:ring-emerald-500" />
             </div>
 
             {/* Sisa Bahan Kimia */}
             <div className="bg-slate-800/60 rounded-2xl border border-blue-500/20 p-4 space-y-3">
                 <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Sisa / Stok Bahan Kimia</p>
-                <Num label="Sisa PAC" value={sisaPAC} setter={setSisaPAC} unit="kg" color="focus:ring-blue-500" />
-                <Num label="Sisa Kaporit" value={sisaKaporit} setter={setSisaKaporit} unit="kg" color="focus:ring-blue-500" />
-                <Num label="Sisa Polimer" value={sisaPolimer} setter={setSisaPolimer} unit="kg" color="focus:ring-blue-500" />
+                <NumInput label="Sisa PAC" value={sisaPAC} setter={setSisaPAC} unit="kg" color="focus:ring-blue-500" />
+                <NumInput label="Sisa Kaporit" value={sisaKaporit} setter={setSisaKaporit} unit="kg" color="focus:ring-blue-500" />
+                <NumInput label="Sisa Polimer" value={sisaPolimer} setter={setSisaPolimer} unit="kg" color="focus:ring-blue-500" />
             </div>
 
             {/* Catatan */}
