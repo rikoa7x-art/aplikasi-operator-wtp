@@ -21,14 +21,24 @@ export default function OperatorPage() {
     const [semua, setSemua] = useState<CatatanWaktu[]>([]);
     const [mingguanList, setMingguanList] = useState<LaporanMingguan[]>([]);
     const [modal, setModal] = useState<Modal>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     const hariOperasi = getHariOperasi();
     const currentSlot = getCurrentSlot();
     const weekInfo = getCurrentWeekRange();
 
-    const reload = () => {
-        setSemua(getCatatan().filter(c => c.operatorId === user!.id));
-        setMingguanList(getMingguan().filter(m => m.operatorId === user!.id));
+    const reload = async () => {
+        setIsLoading(true);
+        try {
+            const cat = await getCatatan();
+            setSemua(cat.filter(c => c.operatorId === user!.id));
+            const ming = await getMingguan();
+            setMingguanList(ming.filter(m => m.operatorId === user!.id));
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
     };
     useEffect(() => { reload(); }, []);
 
@@ -70,7 +80,12 @@ export default function OperatorPage() {
             </header>
 
             {/* Content */}
-            <main className="flex-1 overflow-y-auto px-4 pt-4 pb-28">
+            <main className="flex-1 overflow-y-auto px-4 pt-4 pb-28 relative">
+                {isLoading && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
+                        <div className="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                    </div>
+                )}
 
                 {/* === GRID HARI INI === */}
                 {view === 'grid' && (
@@ -317,7 +332,12 @@ export default function OperatorPage() {
                                 <DetailCatatan catatan={modal.catatan} onClose={() => setModal(null)} />
                                 <button onClick={() => setModal({ type: 'form2jam', slot: modal.catatan.slot, existing: modal.catatan })}
                                     className="mt-3 w-full py-3.5 text-sm font-medium text-blue-400 border border-blue-500/30 active:bg-blue-500/10 rounded-2xl transition">Edit Data</button>
-                                <button onClick={() => { if (!confirm('Hapus data ini?')) return; deleteCatatan(modal.catatan.id); reload(); setModal(null); }}
+                                <button onClick={async () => { 
+                                    if (!confirm('Hapus data ini?')) return; 
+                                    await deleteCatatan(modal.catatan.id); 
+                                    reload(); 
+                                    setModal(null); 
+                                }}
                                     className="mt-2 w-full py-3.5 text-sm font-medium text-red-400 border border-red-500/30 active:bg-red-500/10 rounded-2xl transition">Hapus Data</button>
                             </>
                         )}
@@ -352,7 +372,12 @@ export default function OperatorPage() {
                                 {modal.data.catatan && <p className="text-sm text-slate-400 italic mt-3">"{modal.data.catatan}"</p>}
 
                                 <button onClick={() => setModal(null)} className="mt-4 w-full py-3.5 bg-slate-800 active:bg-slate-700 text-slate-300 font-medium rounded-2xl transition text-sm">Tutup</button>
-                                <button onClick={() => { if (!confirm('Hapus laporan ini?')) return; deleteMingguan(modal.data.id); reload(); setModal(null); }}
+                                <button onClick={async () => { 
+                                    if (!confirm('Hapus laporan ini?')) return; 
+                                    await deleteMingguan(modal.data.id); 
+                                    reload(); 
+                                    setModal(null); 
+                                }}
                                     className="mt-2 w-full py-3 text-sm text-red-400 border border-red-500/30 active:bg-red-500/10 rounded-2xl transition">Hapus</button>
                             </div>
                         )}

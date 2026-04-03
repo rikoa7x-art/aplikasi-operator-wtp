@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { LaporanMingguan } from '../types';
 import { getCurrentWeekRange } from '../types';
 import { useAuth } from '../AuthContext';
-import { getMingguan, saveMingguan, addMingguan, generateId } from '../storage';
+import { getMingguan, saveMingguanObj, generateId } from '../storage';
 
 interface Props {
     existing?: LaporanMingguan | null;
@@ -31,27 +31,33 @@ export default function FormMingguan({ existing, onSuccess, onCancel }: Props) {
 
     const formatTgl = (d: string) => new Date(d + 'T08:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const all = getMingguan();
-        const data: LaporanMingguan = {
-            id: existing?.id ?? generateId(), mingguKe, tanggalMulai, tanggalAkhir,
-            operatorId: user!.id, operatorNama: user!.nama, createdAt: new Date().toISOString(),
-            pemakaianPAC: toNum(pemakaianPAC), pemakaianKaporit: toNum(pemakaianKaporit), pemakaianPolimer: toNum(pemakaianPolimer),
-            sisaPAC: toNum(sisaPAC), sisaKaporit: toNum(sisaKaporit), sisaPolimer: toNum(sisaPolimer),
-            catatan,
-        };
-        if (existing) {
-            const idx = all.findIndex(m => m.id === existing.id);
-            if (idx !== -1) all[idx] = data; else all.push(data);
-            saveMingguan(all);
-        } else {
-            const dup = all.findIndex(m => m.mingguKe === mingguKe && m.operatorId === user!.id);
-            if (dup !== -1) { all[dup] = { ...data, id: all[dup].id }; saveMingguan(all); }
-            else addMingguan(data);
+        try {
+            const all = await getMingguan();
+            const data: LaporanMingguan = {
+                id: existing?.id ?? generateId(), mingguKe, tanggalMulai, tanggalAkhir,
+                operatorId: user!.id, operatorNama: user!.nama, createdAt: new Date().toISOString(),
+                pemakaianPAC: toNum(pemakaianPAC), pemakaianKaporit: toNum(pemakaianKaporit), pemakaianPolimer: toNum(pemakaianPolimer),
+                sisaPAC: toNum(sisaPAC), sisaKaporit: toNum(sisaKaporit), sisaPolimer: toNum(sisaPolimer),
+                catatan,
+            };
+            if (existing) {
+                await saveMingguanObj(data);
+            } else {
+                const dup = all.find(m => m.mingguKe === mingguKe && m.operatorId === user!.id);
+                if (dup) {
+                    await saveMingguanObj({ ...data, id: dup.id });
+                } else {
+                    await saveMingguanObj(data);
+                }
+            }
+            setSuccess(true);
+            setTimeout(() => { setSuccess(false); onSuccess(); }, 900);
+        } catch (err) {
+            console.error(err);
+            alert("Gagal menyimpan data ke Cloud");
         }
-        setSuccess(true);
-        setTimeout(() => { setSuccess(false); onSuccess(); }, 900);
     };
 
     const Num = ({ label, value, setter, unit, color = 'focus:ring-amber-500' }: { label: string; value: string; setter: (v: string) => void; unit: string; color?: string }) => (

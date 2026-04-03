@@ -5,24 +5,42 @@ import { getSession, login as storageLogin, clearSession } from './storage';
 
 interface AuthContextType {
     user: User | null;
-    login: (username: string, password: string) => boolean;
+    login: (username: string, password: string) => Promise<boolean>;
     logout: () => void;
+    isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const session = getSession();
-        if (session) setUser(session);
+        getSession().then(session => {
+            if (session) setUser(session);
+        }).catch(err => {
+            console.error("Failed to restore session", err);
+        }).finally(() => {
+            setIsLoading(false);
+        });
     }, []);
 
-    const login = (username: string, password: string): boolean => {
-        const u = storageLogin(username, password);
-        if (u) { setUser(u); return true; }
-        return false;
+    const login = async (username: string, password: string): Promise<boolean> => {
+        setIsLoading(true);
+        try {
+            const u = await storageLogin(username, password);
+            if (u) { 
+                setUser(u); 
+                return true; 
+            }
+            return false;
+        } catch (err) {
+            console.error("Login Error", err);
+            return false;
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const logout = () => {
@@ -30,7 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
     };
 
-    return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+    return (
+        <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+            {children}
+        </AuthContext.Provider>
+    );
 }
 
 export function useAuth() {

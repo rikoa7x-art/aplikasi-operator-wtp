@@ -20,14 +20,31 @@ export default function AdminPage() {
     const [newNama, setNewNama] = useState('');
     const [newUser, setNewUser] = useState('');
     const [newPass, setNewPass] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
 
     const hariOperasi = getHariOperasi();
     const weekInfo = getCurrentWeekRange();
 
+    const loadData = async () => {
+        setIsLoading(true);
+        try {
+            const [c, u, m] = await Promise.all([
+                getCatatan(),
+                getUsers(),
+                getMingguan()
+            ]);
+            setSemua(c);
+            setUsers(u);
+            setMingguanAll(m);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     useEffect(() => {
-        setSemua(getCatatan());
-        setUsers(getUsers());
-        setMingguanAll(getMingguan());
+        loadData();
     }, [tab]);
 
     const hari = semua.filter(c => c.tanggal === hariOperasi);
@@ -47,16 +64,22 @@ export default function AdminPage() {
 
     const turbColor = (v: number | '') => v === '' ? 'text-slate-500' : Number(v) <= 1 ? 'text-emerald-400' : Number(v) <= 5 ? 'text-amber-400' : 'text-red-400';
 
-    const addUser = () => {
+    const addUser = async () => {
         if (!newNama.trim() || !newUser.trim() || !newPass.trim()) return;
+        setIsLoading(true);
         const updated = [...users, { id: generateId(), username: newUser.toLowerCase().trim(), password: newPass, nama: newNama.trim(), role: 'operator' as const }];
-        saveUsers(updated); setUsers(updated);
+        await saveUsers(updated);
+        setUsers(updated);
         setNewNama(''); setNewUser(''); setNewPass(''); setShowAddUser(false);
+        setIsLoading(false);
     };
-    const deleteUser = (id: string) => {
+    const deleteUser = async (id: string) => {
         if (!confirm('Hapus operator ini?')) return;
+        setIsLoading(true);
         const updated = users.filter(u => u.id !== id);
-        saveUsers(updated); setUsers(updated);
+        await saveUsers(updated); 
+        setUsers(updated);
+        setIsLoading(false);
     };
 
     return (
@@ -91,7 +114,12 @@ export default function AdminPage() {
                 ))}
             </div>
 
-            <main className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
+            <main className="flex-1 overflow-y-auto px-4 pt-4 pb-6 relative">
+                {isLoading && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
+                        <div className="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                    </div>
+                )}
 
                 {/* === DASHBOARD === */}
                 {tab === 'dashboard' && (

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import type { CatatanWaktu } from '../types';
 import { SLOTS, getHariOperasi, getCurrentSlot } from '../types';
 import { useAuth } from '../AuthContext';
-import { addCatatan, getCatatan, saveCatatan, generateId } from '../storage';
+import { getCatatan, saveCatatan, generateId } from '../storage';
 import { uploadToCloudinary } from '../cloudinary';
 
 interface Props {
@@ -100,28 +100,35 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
 
     const removeFoto = () => { setFoto(undefined); setFotoPreview(undefined); setFotoStatus('idle'); setFotoError(''); };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (fotoStatus === 'processing' || fotoStatus === 'uploading') return;
-        const all = getCatatan();
-        const data: CatatanWaktu = {
-            id: existing?.id ?? generateId(), tanggal, slot, jamLabel: selectedSlot.jam,
-            operatorId: user!.id, operatorNama: user!.nama, createdAt: new Date().toISOString(),
-            debitProduksi: toNum(debitProduksi), ntuAirBaku: toNum(ntuAirBaku),
-            dosisPAC: toNum(dosisPAC), ntuOlahan: toNum(ntuOlahan),
-            catatan, foto,
-        };
-        if (existing) {
-            const idx = all.findIndex(c => c.id === existing.id);
-            if (idx !== -1) all[idx] = data; else all.push(data);
-            saveCatatan(all);
-        } else {
-            const dup = all.findIndex(c => c.tanggal === tanggal && c.slot === slot);
-            if (dup !== -1) { all[dup] = { ...data, id: all[dup].id }; saveCatatan(all); }
-            else addCatatan(data);
+        
+        try {
+            const all = await getCatatan();
+            const data: CatatanWaktu = {
+                id: existing?.id ?? generateId(), tanggal, slot, jamLabel: selectedSlot.jam,
+                operatorId: user!.id, operatorNama: user!.nama, createdAt: new Date().toISOString(),
+                debitProduksi: toNum(debitProduksi), ntuAirBaku: toNum(ntuAirBaku),
+                dosisPAC: toNum(dosisPAC), ntuOlahan: toNum(ntuOlahan),
+                catatan, foto,
+            };
+            if (existing) {
+                await saveCatatan(data);
+            } else {
+                const dup = all.find(c => c.tanggal === tanggal && c.slot === slot);
+                if (dup) {
+                    await saveCatatan({ ...data, id: dup.id });
+                } else {
+                    await saveCatatan(data);
+                }
+            }
+            setSuccess(true);
+            setTimeout(() => { setSuccess(false); onSuccess(); }, 900);
+        } catch (err) {
+            console.error(err);
+            alert("Gagal menyimpan data ke Cloud");
         }
-        setSuccess(true);
-        setTimeout(() => { setSuccess(false); onSuccess(); }, 900);
     };
 
     const Num = ({ label, value, setter, unit }: { label: string; value: string; setter: (v: string) => void; unit: string }) => (
