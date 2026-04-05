@@ -14,11 +14,10 @@ interface Props {
 
 const toNum = (s: string): number | '' => { const n = parseFloat(s); return isNaN(n) ? '' : n; };
 
-// Komponen Num harus di LUAR fungsi utama agar keyboard HP tidak hilang saat mengetik
 function NumInput({ label, value, setter, unit }: { label: string; value: string; setter: (v: string) => void; unit: string }) {
     return (
         <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
+            <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide">{label}</label>
             <div className="relative">
                 <input
                     type="text"
@@ -26,10 +25,13 @@ function NumInput({ label, value, setter, unit }: { label: string; value: string
                     pattern="[0-9.]*"
                     value={value}
                     onChange={e => setter(e.target.value.replace(/[^0-9.]/g, ''))}
-                    className="w-full px-4 py-3.5 pr-16 bg-slate-700/60 border border-slate-600/60 rounded-2xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    className="input-glass pr-16"
                     placeholder="0"
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">{unit}</span>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold"
+                    style={{ background: 'rgba(99,130,200,0.1)', padding: '2px 6px', borderRadius: '6px' }}>
+                    {unit}
+                </span>
             </div>
         </div>
     );
@@ -49,12 +51,10 @@ async function processPhoto(file: File, slotJam: string, tanggal: string): Promi
             canvas.width = w; canvas.height = h;
             const ctx = canvas.getContext('2d')!;
             ctx.drawImage(img, 0, 0, w, h);
-
             const now = new Date();
             const waktu = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const tgl = new Date(tanggal + 'T08:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
             const line1 = `Slot ${slotJam}  •  ${waktu}`;
-
             const fs = Math.max(14, Math.round(w / 28));
             const pad = Math.round(fs * 0.7);
             const boxH = (fs + pad) * 2 + pad * 1.5;
@@ -64,14 +64,12 @@ async function processPhoto(file: File, slotJam: string, tanggal: string): Promi
             grad.addColorStop(1, 'rgba(0,0,0,0.88)');
             ctx.fillStyle = grad;
             ctx.fillRect(0, h - boxH - 10, w, boxH + 10);
-
             ctx.font = `bold ${fs}px Arial, sans-serif`;
             ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 4;
             ctx.fillText(line1, pad, h - (fs + pad) - pad * 0.8);
             ctx.font = `${Math.round(fs * 0.82)}px Arial, sans-serif`;
             ctx.fillStyle = 'rgba(200,235,255,0.9)';
             ctx.fillText(tgl, pad, h - pad * 0.6);
-
             URL.revokeObjectURL(url);
             resolve(canvas.toDataURL('image/jpeg', 0.82));
         };
@@ -124,7 +122,6 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (fotoStatus === 'processing' || fotoStatus === 'uploading') return;
-        
         try {
             const all = await getCatatan();
             const data: CatatanWaktu = {
@@ -138,33 +135,48 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
                 await saveCatatan(data);
             } else {
                 const dup = all.find(c => c.tanggal === tanggal && c.slot === slot);
-                if (dup) {
-                    await saveCatatan({ ...data, id: dup.id });
-                } else {
-                    await saveCatatan(data);
-                }
+                if (dup) { await saveCatatan({ ...data, id: dup.id }); }
+                else { await saveCatatan(data); }
             }
             setSuccess(true);
             setTimeout(() => { setSuccess(false); onSuccess(); }, 900);
         } catch (err) {
             console.error(err);
-            alert("Gagal menyimpan data ke Cloud");
+            alert('Gagal menyimpan data ke Cloud');
         }
     };
 
     const isUploading = fotoStatus === 'processing' || fotoStatus === 'uploading';
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Slot */}
+        <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <p className="font-display font-bold text-white text-xl">Input Data</p>
+                <button type="button" onClick={onCancel} className="p-2 rounded-xl text-slate-400 transition"
+                    style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            {/* Slot picker */}
             <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">Pilih Jam</label>
-                <div className="grid grid-cols-4 gap-1.5">
+                <label className="block text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-widest">Pilih Jam</label>
+                <div className="grid grid-cols-4 gap-2">
                     {SLOTS.map(s => (
                         <button key={s.slot} type="button" onClick={() => setSlot(s.slot)}
-                            className={`py-2.5 rounded-xl text-xs font-bold transition active:scale-95 ${slot === s.slot
-                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
-                                : 'bg-slate-700/50 text-slate-400 active:bg-slate-700'}`}>
+                            className="py-3 rounded-2xl text-xs font-bold transition active:scale-95 font-display"
+                            style={slot === s.slot ? {
+                                background: 'linear-gradient(135deg, #1d4ed8, #0891b2)',
+                                color: 'white',
+                                boxShadow: '0 4px 12px rgba(14,116,144,0.4), 0 0 0 1px rgba(34,211,238,0.2)'
+                            } : {
+                                background: 'rgba(255,255,255,0.04)',
+                                color: '#64748b',
+                                border: '1px solid rgba(99,130,200,0.12)'
+                            }}>
                             {s.jam}
                         </button>
                     ))}
@@ -173,14 +185,16 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
 
             {/* Tanggal */}
             <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Tanggal</label>
-                <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)}
-                    className="w-full px-4 py-3.5 bg-slate-700/60 border border-slate-600/60 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+                <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Tanggal</label>
+                <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="input-glass" />
             </div>
 
-            {/* 4 Data Utama */}
-            <div className="bg-slate-800/60 rounded-2xl border border-cyan-500/20 p-4 space-y-3">
-                <p className="text-xs font-bold text-cyan-400 uppercase tracking-wider">Data Operasi</p>
+            {/* Data Operasi */}
+            <div className="rounded-2xl p-4 space-y-4" style={{ background: 'rgba(8,145,178,0.06)', border: '1px solid rgba(34,211,238,0.15)' }}>
+                <div className="flex items-center gap-2">
+                    <div className="w-1 h-4 rounded-full" style={{ background: 'linear-gradient(to bottom, #22d3ee, #1d4ed8)' }} />
+                    <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Data Operasi</p>
+                </div>
                 <NumInput label="Debit Produksi" value={debitProduksi} setter={setDebitProduksi} unit="L/dtk" />
                 <NumInput label="NTU Air Baku" value={ntuAirBaku} setter={setNtuAirBaku} unit="NTU" />
                 <NumInput label="Dosis PAC" value={dosisPAC} setter={setDosisPAC} unit="gr/mnt" />
@@ -189,19 +203,25 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
 
             {/* Catatan */}
             <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Catatan (opsional)</label>
+                <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Catatan (opsional)</label>
                 <textarea value={catatan} onChange={e => setCatatan(e.target.value)} rows={2}
-                    className="w-full px-4 py-3 bg-slate-700/60 border border-slate-600/60 rounded-2xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
+                    className="input-glass resize-none"
                     placeholder="Tambahkan catatan..." />
             </div>
 
             {/* Upload Foto */}
-            <div className="bg-slate-800/60 rounded-2xl border border-violet-500/20 p-4">
+            <div className="rounded-2xl p-4" style={{ background: 'rgba(109,40,217,0.08)', border: '1px solid rgba(167,139,250,0.2)' }}>
                 <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-bold text-violet-400 uppercase tracking-wider">Foto Lapangan</p>
+                    <div className="flex items-center gap-2">
+                        <div className="w-1 h-4 rounded-full" style={{ background: 'linear-gradient(to bottom, #a78bfa, #7c3aed)' }} />
+                        <p className="text-[10px] font-bold text-violet-400 uppercase tracking-widest">Foto Lapangan</p>
+                    </div>
                     {fotoStatus === 'done' && (
-                        <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold">
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                        <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold px-2 py-1 rounded-full"
+                            style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)' }}>
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
                             Tersimpan
                         </span>
                     )}
@@ -209,59 +229,93 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
                 <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleFoto} className="hidden" />
 
                 {isUploading && (
-                    <div className="flex flex-col items-center py-6 gap-2">
-                        <svg className="w-10 h-10 text-violet-400 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        {fotoPreview && <img src={fotoPreview} alt="preview" className="w-full max-h-28 object-cover rounded-xl opacity-50" />}
-                        <p className="text-violet-300 text-sm">{fotoStatus === 'processing' ? 'Memproses...' : 'Upload...'}</p>
+                    <div className="flex flex-col items-center py-8 gap-3">
+                        <div className="relative w-10 h-10">
+                            <div className="w-10 h-10 rounded-full border-2 border-violet-500/20 border-t-violet-400 animate-spin" />
+                        </div>
+                        {fotoPreview && <img src={fotoPreview} alt="preview" className="w-full max-h-32 object-cover rounded-xl opacity-40" />}
+                        <p className="text-violet-300 text-sm font-medium">{fotoStatus === 'processing' ? 'Memproses foto...' : 'Mengupload...'}</p>
                     </div>
                 )}
 
                 {fotoStatus === 'error' && (
                     <div className="space-y-2">
-                        <div className="flex gap-2 bg-red-500/10 border border-red-500/30 rounded-2xl px-4 py-3">
-                            <svg className="w-4 h-4 text-red-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                        <div className="flex gap-2 rounded-xl px-4 py-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                            <svg className="w-4 h-4 text-red-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
                             <p className="text-red-400 text-xs">{fotoError}</p>
                         </div>
-                        <button type="button" onClick={() => fileRef.current?.click()} className="w-full py-2.5 text-violet-400 border border-violet-500/30 rounded-xl text-xs font-medium active:bg-violet-500/10 transition">Coba Lagi</button>
+                        <button type="button" onClick={() => fileRef.current?.click()}
+                            className="w-full py-2.5 text-violet-400 text-xs font-bold rounded-xl transition"
+                            style={{ border: '1px solid rgba(167,139,250,0.25)' }}>
+                            Coba Lagi
+                        </button>
                     </div>
                 )}
 
                 {fotoStatus === 'done' && fotoPreview && (
                     <div className="space-y-2">
-                        <img src={fotoPreview} alt="Foto" className="w-full object-cover rounded-2xl max-h-52 border border-violet-500/30" />
+                        <img src={fotoPreview} alt="Foto" className="w-full object-cover rounded-2xl max-h-52" style={{ border: '1px solid rgba(167,139,250,0.25)' }} />
                         <div className="flex gap-2">
-                            <button type="button" onClick={() => fileRef.current?.click()} className="flex-1 py-2.5 bg-slate-700/60 border border-slate-600/50 rounded-xl text-slate-300 text-xs font-medium active:bg-slate-700 transition">Ganti Foto</button>
-                            <button type="button" onClick={removeFoto} className="px-4 py-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs active:bg-red-500/20 transition">Hapus</button>
+                            <button type="button" onClick={() => fileRef.current?.click()}
+                                className="flex-1 py-2.5 text-slate-300 text-xs font-semibold rounded-xl transition"
+                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(99,130,200,0.15)' }}>
+                                Ganti Foto
+                            </button>
+                            <button type="button" onClick={removeFoto}
+                                className="px-4 py-2.5 text-red-400 text-xs rounded-xl transition"
+                                style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                                Hapus
+                            </button>
                         </div>
                     </div>
                 )}
 
                 {fotoStatus === 'idle' && (
                     <button type="button" onClick={() => fileRef.current?.click()}
-                        className="w-full flex flex-col items-center gap-2 py-7 rounded-2xl border-2 border-dashed border-violet-500/30 bg-violet-500/5 active:bg-violet-500/10 transition">
-                        <svg className="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <p className="text-violet-300 text-sm font-semibold">Ambil / Upload Foto</p>
-                        <p className="text-slate-500 text-xs">Jam tercetak otomatis</p>
+                        className="w-full flex flex-col items-center gap-3 py-8 rounded-2xl transition active:scale-[0.98]"
+                        style={{ border: '2px dashed rgba(167,139,250,0.2)', background: 'rgba(109,40,217,0.04)' }}>
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                            style={{ background: 'rgba(109,40,217,0.15)', border: '1px solid rgba(167,139,250,0.2)' }}>
+                            <svg className="w-6 h-6 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-violet-300 text-sm font-semibold">Ambil / Upload Foto</p>
+                            <p className="text-slate-600 text-xs mt-0.5">Jam tercetak otomatis</p>
+                        </div>
                     </button>
                 )}
             </div>
 
+            {/* Success */}
             {success && (
-                <div className="flex gap-2 items-center bg-emerald-500/10 border border-emerald-500/30 rounded-2xl px-4 py-3">
-                    <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                <div className="flex gap-2 items-center rounded-2xl px-4 py-3"
+                    style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
+                    <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
                     <p className="text-emerald-400 text-sm font-semibold">Data berhasil disimpan!</p>
                 </div>
             )}
 
-            <div className="flex gap-3 pt-1">
-                <button type="button" onClick={onCancel} className="flex-1 py-4 text-slate-400 border border-slate-700 rounded-2xl active:bg-slate-800 text-sm font-medium transition">Batal</button>
-                <button type="submit" disabled={isUploading} className="flex-[2] py-4 bg-blue-600 active:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-2xl transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20">
+            {/* Action buttons */}
+            <div className="flex gap-3">
+                <button type="button" onClick={onCancel}
+                    className="flex-1 py-4 text-slate-400 rounded-2xl text-sm font-semibold transition"
+                    style={{ border: '1px solid rgba(99,130,200,0.2)' }}>
+                    Batal
+                </button>
+                <button type="submit" disabled={isUploading}
+                    className="flex-[2] py-4 text-white font-display font-bold rounded-2xl transition active:scale-[0.98]"
+                    style={{
+                        background: 'linear-gradient(135deg, #1d4ed8, #0891b2)',
+                        boxShadow: '0 4px 20px rgba(14,116,144,0.35)',
+                        opacity: isUploading ? 0.6 : 1
+                    }}>
                     {isUploading ? 'Menunggu foto...' : 'Simpan Data'}
                 </button>
             </div>
