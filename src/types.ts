@@ -54,15 +54,6 @@ function getJakartaTime(date: Date = new Date()): JktTime {
 export function getHariOperasi(): string {
     const jkt = getJakartaTime();
     
-    if (jkt.h < 6) {
-        // Safe date arithmetic using UTC to subtract 1 day precisely
-        const yesterday = new Date(Date.UTC(jkt.y, jkt.m - 1, jkt.d - 1));
-        const y = yesterday.getUTCFullYear();
-        const m = String(yesterday.getUTCMonth() + 1).padStart(2, '0');
-        const d = String(yesterday.getUTCDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
-    }
-    
     return jkt.dateStr;
 }
 
