@@ -26,28 +26,49 @@ export const SLOTS: { slot: number; jam: string }[] = [
     { slot: 12, jam: '04:00' },
 ];
 
-function getLocalYYYYMMDD(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+interface JktTime {
+    y: number; m: number; d: number; h: number; weekday: string; dateStr: string;
 }
 
-/** Hari operasi: sebelum jam 06:00 dianggap masih hari kemarin */
+/** Utility untuk selalu mendapatkan waktu dalam zona Waktu Indonesia Barat (Asia/Jakarta) */
+function getJakartaTime(date: Date = new Date()): JktTime {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', hourCycle: 'h23', weekday: 'short'
+    }).formatToParts(date);
+    
+    const val = (t: string) => parts.find(p => p.type === t)?.value || '0';
+    const y = parseInt(val('year'), 10);
+    const m = parseInt(val('month'), 10);
+    const d = parseInt(val('day'), 10);
+    const h = parseInt(val('hour'), 10);
+    
+    return {
+        y, m, d, h, weekday: val('weekday'),
+        dateStr: `${val('year')}-${val('month')}-${val('day')}`
+    };
+}
+
+/** Hari operasi: sebelum jam 06:00 dianggap masih hari kemarin (Waktu Jakarta) */
 export function getHariOperasi(): string {
-    const now = new Date();
-    if (now.getHours() < 6) {
-        const kemarin = new Date(now);
-        kemarin.setDate(kemarin.getDate() - 1);
-        return getLocalYYYYMMDD(kemarin);
+    const jkt = getJakartaTime();
+    
+    if (jkt.h < 6) {
+        // Safe date arithmetic using UTC to subtract 1 day precisely
+        const yesterday = new Date(Date.UTC(jkt.y, jkt.m - 1, jkt.d - 1));
+        const y = yesterday.getUTCFullYear();
+        const m = String(yesterday.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(yesterday.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
     }
-    return getLocalYYYYMMDD(now);
+    
+    return jkt.dateStr;
 }
 
-
-/** Slot aktif berdasarkan jam sekarang */
+/** Slot aktif berdasarkan jam sekarang (Waktu Jakarta) */
 export function getCurrentSlot(): number {
-    const h = new Date().getHours();
+    const h = getJakartaTime().h;
     if (h >= 6  && h < 8)  return 1;
     if (h >= 8  && h < 10) return 2;
     if (h >= 10 && h < 12) return 3;
@@ -105,28 +126,39 @@ export interface LaporanMingguan {
     catatan: string;
 }
 
-/** Menghitung ISO week string "YYYY-Www" dari tanggal */
-export function getISOWeek(d: Date): string {
-    const date = new Date(d.getTime());
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
-    const week1 = new Date(date.getFullYear(), 0, 4);
-    const weekNum = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
-    return `${date.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+/** Menghitung ISO week string "YYYY-Www" secara konsisten dengan UTC agar bebas timezone offset */
+export function getISOWeek(baseUtcStr: Date): string {
+    const date = new Date(baseUtcStr.getTime());
+    date.setUTCHours(0, 0, 0, 0);
+    date.setUTCDate(date.getUTCDate() + 3 - ((date.getUTCDay() + 6) % 7));
+    const week1 = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+    const weekNum = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getUTCDay() + 6) % 7)) / 7);
+    return `${date.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
 }
 
-/** Tanggal Senin dan Minggu dari minggu saat ini */
+/** Tanggal Senin dan Minggu dari minggu saat ini (Waktu Jakarta) */
 export function getCurrentWeekRange(): { mulai: string; akhir: string; mingguKe: string } {
-    const now = new Date();
-    const day = now.getDay();
+    const jkt = getJakartaTime();
+    
+    // Convert short weekday to day index (0 = Sun, 1 = Mon, ..., 6 = Sat)
+    const dayMap: Record<string, number> = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+    const day = dayMap[jkt.weekday];
+    
+    // Arithmetic safely done in UTC space
+    const base = new Date(Date.UTC(jkt.y, jkt.m - 1, jkt.d));
     const diffToMon = day === 0 ? -6 : 1 - day;
-    const senin = new Date(now);
-    senin.setDate(now.getDate() + diffToMon);
-    const minggu = new Date(senin);
-    minggu.setDate(senin.getDate() + 6);
+    
+    const senin = new Date(base.getTime());
+    senin.setUTCDate(senin.getUTCDate() + diffToMon);
+    
+    const minggu = new Date(senin.getTime());
+    minggu.setUTCDate(minggu.getUTCDate() + 6);
+    
+    const formatUTC = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    
     return {
-        mulai: getLocalYYYYMMDD(senin),
-        akhir: getLocalYYYYMMDD(minggu),
-        mingguKe: getISOWeek(now),
+        mulai: formatUTC(senin),
+        akhir: formatUTC(minggu),
+        mingguKe: getISOWeek(base),
     };
 }
