@@ -85,7 +85,7 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
     const fileRef = useRef<HTMLInputElement>(null);
 
     const [slot, setSlot] = useState<number>(existing?.slot ?? initialSlot ?? getCurrentSlot());
-    const [tanggal, setTanggal] = useState(existing?.tanggal ?? hariOperasi);
+    const tanggal = existing?.tanggal ?? hariOperasi;
     const [debitProduksi, setDebitProduksi] = useState(existing?.debitProduksi?.toString() ?? '');
     const [ntuAirBaku, setNtuAirBaku] = useState(existing?.ntuAirBaku?.toString() ?? '');
     const [dosisPAC, setDosisPAC] = useState(existing?.dosisPAC?.toString() ?? '');
@@ -183,10 +183,22 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
                 </div>
             </div>
 
-            {/* Tanggal */}
+            {/* Tanggal — otomatis hari ini */}
             <div>
-                <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Tanggal</label>
-                <input type="date" value={tanggal} onChange={e => setTanggal(e.target.value)} className="input-glass" />
+                <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Tanggal Operasi</label>
+                <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(99,130,200,0.15)' }}>
+                    <svg className="w-4 h-4 text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-white font-semibold text-sm">
+                        {new Date(tanggal + 'T08:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                    <span className="ml-auto text-[10px] font-bold px-2 py-1 rounded-full"
+                        style={{ background: 'rgba(34,211,238,0.1)', color: '#22d3ee', border: '1px solid rgba(34,211,238,0.2)' }}>
+                        Otomatis
+                    </span>
+                </div>
             </div>
 
             {/* Data Operasi */}
