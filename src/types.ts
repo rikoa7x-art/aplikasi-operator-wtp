@@ -26,16 +26,24 @@ export const SLOTS: { slot: number; jam: string }[] = [
     { slot: 12, jam: '04:00' },
 ];
 
+function getLocalYYYYMMDD(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
 /** Hari operasi: sebelum jam 06:00 dianggap masih hari kemarin */
 export function getHariOperasi(): string {
     const now = new Date();
     if (now.getHours() < 6) {
         const kemarin = new Date(now);
         kemarin.setDate(kemarin.getDate() - 1);
-        return kemarin.toISOString().split('T')[0];
+        return getLocalYYYYMMDD(kemarin);
     }
-    return now.toISOString().split('T')[0];
+    return getLocalYYYYMMDD(now);
 }
+
 
 /** Slot aktif berdasarkan jam sekarang */
 export function getCurrentSlot(): number {
@@ -117,8 +125,8 @@ export function getCurrentWeekRange(): { mulai: string; akhir: string; mingguKe:
     const minggu = new Date(senin);
     minggu.setDate(senin.getDate() + 6);
     return {
-        mulai: senin.toISOString().split('T')[0],
-        akhir: minggu.toISOString().split('T')[0],
+        mulai: getLocalYYYYMMDD(senin),
+        akhir: getLocalYYYYMMDD(minggu),
         mingguKe: getISOWeek(now),
     };
 }
