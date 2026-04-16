@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { CatatanWaktu } from '../types';
 import { SLOTS, getHariOperasi, getCurrentSlot } from '../types';
 import { useAuth } from '../AuthContext';
@@ -81,6 +81,10 @@ type FotoStatus = 'idle' | 'processing' | 'uploading' | 'done' | 'error';
 
 export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel }: Props) {
     const { user } = useAuth();
+    const isWTP = user?.tipeOperator === 'operator_wtp';
+    const uCabang = (user?.cabang || '').trim().toLowerCase();
+    const isGravitasi = uCabang === 'subang' || uCabang === 'tanjungsiang';
+    
     const hariOperasi = getHariOperasi();
     const fileRef = useRef<HTMLInputElement>(null);
 
@@ -96,6 +100,58 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
     const [fotoStatus, setFotoStatus] = useState<FotoStatus>(existing?.foto ? 'done' : 'idle');
     const [fotoError, setFotoError] = useState('');
     const [success, setSuccess] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
+    const [isDirty, setIsDirty] = useState(false);
+
+    const [ampere, setAmpere] = useState(existing?.ampere?.toString() ?? '');
+    const [voltase, setVoltase] = useState(existing?.voltase?.toString() ?? '');
+    const [tekananPompa, setTekananPompa] = useState(existing?.tekananPompa?.toString() ?? '');
+    const [sisaChlor, setSisaChlor] = useState(existing?.sisaChlor?.toString() ?? '');
+    const [dosisKaporit, setDosisKaporit] = useState(existing?.dosisKaporit?.toString() ?? '');
+    const [wmProduksiAwal, setWmProduksiAwal] = useState(existing?.wmProduksiAwal?.toString() ?? '');
+    const [wmProduksiAkhir, setWmProduksiAkhir] = useState(existing?.wmProduksiAkhir?.toString() ?? '');
+    const [wmDistribusiAwal, setWmDistribusiAwal] = useState(existing?.wmDistribusiAwal?.toString() ?? '');
+    const [wmDistribusiAkhir, setWmDistribusiAkhir] = useState(existing?.wmDistribusiAkhir?.toString() ?? '');
+    const [debitDistribusiManual, setDebitDistribusiManual] = useState(existing?.debitDistribusi?.toString() ?? '');
+
+    // Track Form changes
+    useEffect(() => {
+        setIsDirty(
+            debitProduksi !== (existing?.debitProduksi?.toString() ?? '') ||
+            ntuAirBaku !== (existing?.ntuAirBaku?.toString() ?? '') ||
+            dosisPAC !== (existing?.dosisPAC?.toString() ?? '') ||
+            ntuOlahan !== (existing?.ntuOlahan?.toString() ?? '') ||
+            catatan !== (existing?.catatan ?? '') ||
+            ampere !== (existing?.ampere?.toString() ?? '') ||
+            voltase !== (existing?.voltase?.toString() ?? '') ||
+            tekananPompa !== (existing?.tekananPompa?.toString() ?? '')
+        );
+    }, [debitProduksi, ntuAirBaku, dosisPAC, ntuOlahan, catatan, ampere, voltase, tekananPompa, existing]);
+
+    const handleCancel = () => {
+        if (isDirty && !window.confirm('Ada perubahan yang belum disimpan. Yakin ingin menutup?')) return;
+        onCancel();
+    };
+
+    const calcVolume = (awal: string, akhir: string): number | '' => {
+        const a = parseFloat(awal), b = parseFloat(akhir);
+        if (isNaN(a) || isNaN(b)) return '';
+        const v = b - a;
+        return v < 0 ? '' : Math.round(v * 1000) / 1000;
+    };
+    const calcDebit = (vol: number | ''): number | '' => {
+        if (vol === '') return '';
+        return Math.round((vol / 3.6 / 2) * 1000) / 1000;
+    };
+
+    const volumeProduksi = calcVolume(wmProduksiAwal, wmProduksiAkhir);
+    const debitProduksiAuto = calcDebit(volumeProduksi);
+    const volumeDistribusi = calcVolume(wmDistribusiAwal, wmDistribusiAkhir);
+    const debitDistribusiAuto = calcDebit(volumeDistribusi);
+
+    const hasWmProduksi = wmProduksiAwal !== '' || wmProduksiAkhir !== '';
+    const hasWmDistribusi = wmDistribusiAwal !== '' || wmDistribusiAkhir !== '';
 
     const selectedSlot = SLOTS.find(s => s.slot === slot)!;
 
@@ -122,27 +178,48 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (fotoStatus === 'processing' || fotoStatus === 'uploading') return;
+        setSaving(true); setSaveError('');
         try {
             const all = await getCatatan();
-            const data: CatatanWaktu = {
+            // Buat data catatan — pastikan tidak ada nilai undefined (Firestore error)
+            const rawData = {
                 id: existing?.id ?? generateId(), tanggal, slot, jamLabel: selectedSlot.jam,
-                operatorId: user!.id, operatorNama: user!.nama, createdAt: new Date().toISOString(),
-                debitProduksi: toNum(debitProduksi), ntuAirBaku: toNum(ntuAirBaku),
-                dosisPAC: toNum(dosisPAC), ntuOlahan: toNum(ntuOlahan),
-                catatan, foto,
+                operatorId: user!.id, operatorNama: user!.nama,
+                operatorCabang: user?.cabang ?? '',
+                cabang: user?.cabang ?? '',
+                createdAt: new Date().toISOString(),
+                debitProduksi: isWTP ? (hasWmProduksi ? debitProduksiAuto : toNum(debitProduksi)) : toNum(debitProduksi),
+                ntuAirBaku: toNum(ntuAirBaku), dosisPAC: toNum(dosisPAC),
+                ntuOlahan: toNum(ntuOlahan),
+                catatan: catatan || '',
+                foto: foto || null,
+                debitAirBaku: 0,
+                tekananPompa: toNum(tekananPompa),
+                ampere: toNum(ampere), voltase: toNum(voltase),
+                sisaChlor: toNum(sisaChlor), dosisKaporit: toNum(dosisKaporit),
+                wmProduksiAwal: toNum(wmProduksiAwal), wmProduksiAkhir: toNum(wmProduksiAkhir),
+                wmDistribusiAwal: toNum(wmDistribusiAwal), wmDistribusiAkhir: toNum(wmDistribusiAkhir),
+                volumeProduksi: volumeProduksi !== '' ? volumeProduksi : 0,
+                volumeDistribusi: volumeDistribusi !== '' ? volumeDistribusi : 0,
+                debitDistribusi: hasWmDistribusi ? debitDistribusiAuto : toNum(debitDistribusiManual)
             };
+            // Hapus field null/undefined agar Firestore tidak error
+            const data: CatatanWaktu = Object.fromEntries(
+                Object.entries(rawData).filter(([, v]) => v !== undefined && v !== null)
+            ) as unknown as CatatanWaktu;
             if (existing) {
                 await saveCatatan(data);
             } else {
-                const dup = all.find(c => c.tanggal === tanggal && c.slot === slot);
+                const dup = all.find(c => c.tanggal === tanggal && c.slot === slot && c.operatorId === user!.id);
                 if (dup) { await saveCatatan({ ...data, id: dup.id }); }
                 else { await saveCatatan(data); }
             }
-            setSuccess(true);
+            setSaving(false); setSuccess(true);
             setTimeout(() => { setSuccess(false); onSuccess(); }, 900);
-        } catch (err) {
+        } catch (err: unknown) {
             console.error(err);
-            alert('Gagal menyimpan data ke Cloud');
+            setSaveError(err instanceof Error ? err.message : 'Upload gagal, periksa koneksi');
+            setSaving(false);
         }
     };
 
@@ -150,10 +227,9 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
 
     return (
         <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Header */}
             <div className="flex items-center justify-between">
                 <p className="font-display font-bold text-white text-xl">Input Data</p>
-                <button type="button" onClick={onCancel} className="p-2 rounded-xl text-slate-400 transition"
+                <button type="button" onClick={handleCancel} className="p-2 rounded-xl text-slate-400 transition"
                     style={{ background: 'rgba(255,255,255,0.05)' }}>
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -161,7 +237,6 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
                 </button>
             </div>
 
-            {/* Slot picker */}
             <div>
                 <label className="block text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-widest">Pilih Jam</label>
                 <div className="grid grid-cols-4 gap-2">
@@ -183,7 +258,6 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
                 </div>
             </div>
 
-            {/* Tanggal — otomatis hari ini */}
             <div>
                 <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Tanggal Operasi</label>
                 <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl"
@@ -201,19 +275,131 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
                 </div>
             </div>
 
-            {/* Data Operasi */}
+            {!isGravitasi && (
+                <div className="bg-slate-800/60 rounded-2xl border border-rose-500/20 p-4 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-bl-full" />
+                    <p className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-4 border-b border-rose-500/10 pb-2">Pompa & Kelistrikan</p>
+                    <div className="grid grid-cols-2 gap-4">
+                        <NumInput label="Ampere" value={ampere} setter={setAmpere} unit="A" />
+                        <NumInput label="Voltase" value={voltase} setter={setVoltase} unit="V" />
+                        <div className="col-span-2">
+                            <NumInput label="Tekanan Pompa" value={tekananPompa} setter={setTekananPompa} unit="bar" />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="bg-slate-800/60 rounded-2xl border border-sky-500/20 p-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-sky-500/5 rounded-bl-full" />
+                <p className="text-xs font-bold text-sky-400 uppercase tracking-wider mb-4 border-b border-sky-500/10 pb-2">WM Distribusi</p>
+                <div className="grid grid-cols-2 gap-4">
+                    <NumInput label="WM Awal" value={wmDistribusiAwal} setter={setWmDistribusiAwal} unit="m³" />
+                    <NumInput label="WM Akhir" value={wmDistribusiAkhir} setter={setWmDistribusiAkhir} unit="m³" />
+                    
+                    {hasWmDistribusi ? (
+                        <>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1.5">Volume</label>
+                                <div className="px-4 py-3.5 bg-slate-700/30 border border-slate-600/30 rounded-2xl">
+                                    <p className="text-white text-sm font-semibold">{volumeDistribusi !== '' ? volumeDistribusi : '-'}</p>
+                                    <p className="text-xs text-sky-400 font-medium">m³</p>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-slate-400 mb-1.5">Debit</label>
+                                <div className="px-4 py-3.5 bg-slate-700/30 border border-slate-600/30 rounded-2xl">
+                                    <p className="text-white text-sm font-semibold">{debitDistribusiAuto !== '' ? debitDistribusiAuto : '-'}</p>
+                                    <p className="text-xs text-sky-400 font-medium">l/dtk</p>
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="col-span-2 space-y-4">
+                            <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 flex gap-2">
+                                <svg className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <p className="text-xs text-sky-200 leading-relaxed">
+                                    WM tidak diisi. Input debit secara manual.
+                                </p>
+                            </div>
+                            <NumInput 
+                                label="Debit Dist. Manual" 
+                                value={debitDistribusiManual} 
+                                setter={setDebitDistribusiManual} 
+                                unit="l/dtk" 
+                            />
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {isWTP && (
+                <div className="bg-slate-800/60 rounded-2xl border border-indigo-500/20 p-4">
+                    <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-4 border-b border-indigo-500/10 pb-2">Produksi & Kimia (WTP)</p>
+
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <NumInput label="WM Prod Awal" value={wmProduksiAwal} setter={setWmProduksiAwal} unit="m³" />
+                        <NumInput label="WM Prod Akhir" value={wmProduksiAkhir} setter={setWmProduksiAkhir} unit="m³" />
+                        
+                        {hasWmProduksi ? (
+                            <>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Volume</label>
+                                    <div className="px-4 py-3.5 bg-slate-700/30 border border-slate-600/30 rounded-2xl">
+                                        <p className="text-white text-sm font-semibold">{volumeProduksi !== '' ? volumeProduksi : '-'}</p>
+                                        <p className="text-xs text-indigo-400 font-medium">m³</p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Debit</label>
+                                    <div className="px-4 py-3.5 bg-slate-700/30 border border-slate-600/30 rounded-2xl">
+                                        <p className="text-white text-sm font-semibold">{debitProduksiAuto !== '' ? debitProduksiAuto : '-'}</p>
+                                        <p className="text-xs text-indigo-400 font-medium">l/dtk</p>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="col-span-2 space-y-4">
+                                <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-3 flex gap-2">
+                                    <svg className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <p className="text-xs text-indigo-200 leading-relaxed">
+                                        Water Meter Produksi tidak diisi. Input debit secara manual.
+                                    </p>
+                                </div>
+                                <NumInput 
+                                    label="Debit Produksi Manual" 
+                                    value={debitProduksi} 
+                                    setter={setDebitProduksi} 
+                                    unit="l/dtk" 
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="space-y-4 border-t border-slate-700/50 pt-4">
+                        <NumInput label="Sisa Chlor" value={sisaChlor} setter={setSisaChlor} unit="ppm" />
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <NumInput label="Dosis PAC" value={dosisPAC} setter={setDosisPAC} unit="ppm" />
+                            <NumInput label="Dosis Kaporit" value={dosisKaporit} setter={setDosisKaporit} unit="ppm" />
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="rounded-2xl p-4 space-y-4" style={{ background: 'rgba(8,145,178,0.06)', border: '1px solid rgba(34,211,238,0.15)' }}>
                 <div className="flex items-center gap-2">
                     <div className="w-1 h-4 rounded-full" style={{ background: 'linear-gradient(to bottom, #22d3ee, #1d4ed8)' }} />
-                    <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Data Operasi</p>
+                    <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Kualitas Air</p>
                 </div>
-                <NumInput label="Debit Produksi" value={debitProduksi} setter={setDebitProduksi} unit="L/dtk" />
+                {!hasWmProduksi && !isWTP && <NumInput label="Debit Manual" value={debitProduksi} setter={setDebitProduksi} unit="L/dtk" />}
                 <NumInput label="NTU Air Baku" value={ntuAirBaku} setter={setNtuAirBaku} unit="NTU" />
-                <NumInput label="Dosis PAC" value={dosisPAC} setter={setDosisPAC} unit="gr/mnt" />
                 <NumInput label="NTU Setelah Pengolahan" value={ntuOlahan} setter={setNtuOlahan} unit="NTU" />
             </div>
 
-            {/* Catatan */}
             <div>
                 <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Catatan (opsional)</label>
                 <textarea value={catatan} onChange={e => setCatatan(e.target.value)} rows={2}
@@ -221,7 +407,6 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
                     placeholder="Tambahkan catatan..." />
             </div>
 
-            {/* Upload Foto */}
             <div className="rounded-2xl p-4" style={{ background: 'rgba(109,40,217,0.08)', border: '1px solid rgba(167,139,250,0.2)' }}>
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
@@ -303,7 +488,6 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
                 )}
             </div>
 
-            {/* Success */}
             {success && (
                 <div className="flex gap-2 items-center rounded-2xl px-4 py-3"
                     style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
@@ -314,21 +498,29 @@ export default function FormCatatan({ initialSlot, existing, onSuccess, onCancel
                 </div>
             )}
 
-            {/* Action buttons */}
+            {saveError && (
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex gap-3 anim-fadeIn">
+                    <svg className="w-5 h-5 text-red-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-red-400 text-sm">{saveError}</p>
+                </div>
+            )}
+
             <div className="flex gap-3">
-                <button type="button" onClick={onCancel}
+                <button type="button" onClick={handleCancel}
                     className="flex-1 py-4 text-slate-400 rounded-2xl text-sm font-semibold transition"
                     style={{ border: '1px solid rgba(99,130,200,0.2)' }}>
                     Batal
                 </button>
-                <button type="submit" disabled={isUploading}
+                <button type="submit" disabled={isUploading || saving}
                     className="flex-[2] py-4 text-white font-display font-bold rounded-2xl transition active:scale-[0.98]"
                     style={{
                         background: 'linear-gradient(135deg, #1d4ed8, #0891b2)',
                         boxShadow: '0 4px 20px rgba(14,116,144,0.35)',
-                        opacity: isUploading ? 0.6 : 1
+                        opacity: (isUploading || saving) ? 0.6 : 1
                     }}>
-                    {isUploading ? 'Menunggu foto...' : 'Simpan Data'}
+                    {saving ? 'Menyimpan...' : (isUploading ? 'Menunggu foto...' : 'Simpan Data')}
                 </button>
             </div>
         </form>

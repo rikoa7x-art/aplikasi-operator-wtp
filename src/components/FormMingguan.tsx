@@ -53,16 +53,23 @@ export default function FormMingguan({ existing, onSuccess, onCancel }: Props) {
     const [sisaPolimer, setSisaPolimer] = useState(existing?.sisaPolimer?.toString() ?? '');
     const [catatan, setCatatan] = useState(existing?.catatan ?? '');
     const [success, setSuccess] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
 
     const formatTgl = (d: string) => new Date(d + 'T08:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (saving) return;
+        setSaving(true);
+        setSaveError('');
         try {
             const all = await getMingguan();
             const data: LaporanMingguan = {
                 id: existing?.id ?? generateId(), mingguKe, tanggalMulai, tanggalAkhir,
-                operatorId: user!.id, operatorNama: user!.nama, createdAt: new Date().toISOString(),
+                operatorId: user!.id, operatorNama: user!.nama,
+                operatorCabang: user!.cabang ?? '',
+                createdAt: new Date().toISOString(),
                 pemakaianPAC: toNum(pemakaianPAC), pemakaianKaporit: toNum(pemakaianKaporit), pemakaianPolimer: toNum(pemakaianPolimer),
                 sisaPAC: toNum(sisaPAC), sisaKaporit: toNum(sisaKaporit), sisaPolimer: toNum(sisaPolimer),
                 catatan,
@@ -78,7 +85,9 @@ export default function FormMingguan({ existing, onSuccess, onCancel }: Props) {
             setTimeout(() => { setSuccess(false); onSuccess(); }, 900);
         } catch (err) {
             console.error(err);
-            alert('Gagal menyimpan data ke Cloud');
+            setSaveError('Gagal menyimpan data ke Cloud. Periksa koneksi internet.');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -145,6 +154,17 @@ export default function FormMingguan({ existing, onSuccess, onCancel }: Props) {
                 </div>
             )}
 
+            {/* Save Error */}
+            {saveError && (
+                <div className="flex gap-2 items-center rounded-2xl px-4 py-3"
+                    style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                    <svg className="w-4 h-4 text-red-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <p className="text-red-400 text-sm">{saveError}</p>
+                </div>
+            )}
+
             {/* Actions */}
             <div className="flex gap-3">
                 <button type="button" onClick={onCancel}
@@ -152,13 +172,13 @@ export default function FormMingguan({ existing, onSuccess, onCancel }: Props) {
                     style={{ border: '1px solid rgba(99,130,200,0.2)' }}>
                     Batal
                 </button>
-                <button type="submit"
-                    className="flex-[2] py-4 text-white font-display font-bold rounded-2xl transition active:scale-[0.98]"
+                <button type="submit" disabled={saving}
+                    className="flex-[2] py-4 text-white font-display font-bold rounded-2xl transition active:scale-[0.98] disabled:opacity-60"
                     style={{
                         background: 'linear-gradient(135deg, #92400e, #b45309)',
                         boxShadow: '0 4px 20px rgba(180,83,9,0.35), 0 0 0 1px rgba(245,158,11,0.15)'
                     }}>
-                    Simpan Laporan
+                    {saving ? 'Menyimpan...' : 'Simpan Laporan'}
                 </button>
             </div>
         </form>

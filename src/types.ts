@@ -1,13 +1,56 @@
 // Types for WTP Operator App
 
 export type Role = 'admin' | 'operator';
+export type TipeOperator = 'operator_wtp' | 'operator_reservoir';
+
+export const CABANG_LIST: string[] = [
+    'Subang',
+    'Pagaden',
+    'Jalan Cagak',
+    'Kasomalang',
+    'Sagalaherang',
+    'Cisalak',
+    'Tanjungsiang',
+    'Binong',
+    'Pamanukan',
+    'Compreng',
+    'Pusakanagara',
+    'Blanakan',
+    'Pabuaran',
+    'Kalijati',
+    'Purwadadi',
+];
+
+export const TIPE_OPERATOR_LABEL: Record<TipeOperator, string> = {
+    operator_wtp: 'Operator WTP',
+    operator_reservoir: 'Operator Reservoir',
+};
+
+export function getWtpLabel(cabang?: string): string {
+    if (cabang && ['Cisalak', 'Kasomalang', 'Jalan Cagak'].includes(cabang)) {
+        return 'Sistem Pompa';
+    }
+    if (cabang && ['Subang', 'Tanjungsiang'].includes(cabang)) {
+        return 'WTP Gravitasi';
+    }
+    return 'WTP';
+}
+
+export function getTipeOperatorLabel(tipe: TipeOperator | '', cabang?: string): string {
+    if (!tipe) return '';
+    if (tipe === 'operator_wtp') {
+        return 'Operator ' + getWtpLabel(cabang);
+    }
+    return TIPE_OPERATOR_LABEL[tipe];
+}
 
 export interface User {
     id: string;
     username: string;
-    password: string;
     nama: string;
     role: Role;
+    tipeOperator?: TipeOperator;
+    cabang?: string;
 }
 
 // 12 slot waktu per hari operasi (mulai 06:00)
@@ -54,6 +97,16 @@ function getJakartaTime(date: Date = new Date()): JktTime {
 export function getHariOperasi(): string {
     const jkt = getJakartaTime();
     
+    // Shift malam: sebelum jam 06:00 → masih hari operasi kemarin
+    if (jkt.h < 6) {
+        const yesterday = new Date(Date.UTC(jkt.y, jkt.m - 1, jkt.d));
+        yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+        const yy = yesterday.getUTCFullYear();
+        const mm = String(yesterday.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(yesterday.getUTCDate()).padStart(2, '0');
+        return `${yy}-${mm}-${dd}`;
+    }
+    
     return jkt.dateStr;
 }
 
@@ -82,13 +135,33 @@ export interface CatatanWaktu {
     jamLabel: string;     // "06:00", "08:00", ...
     operatorId: string;
     operatorNama: string;
+    operatorCabang?: string; // cabang operator (untuk filter admin)
+    cabang?: string;         // cabang operator (alias lama)
     createdAt: string;
 
-    // 4 data utama
+    // Data umum (semua tipe operator)
     debitProduksi: number | '';      // L/detik
     ntuAirBaku: number | '';         // NTU
     dosisPAC: number | '';           // gr/menit
     ntuOlahan: number | '';          // NTU setelah pengolahan
+
+    // Data khusus Operator WTP (opsional, tidak wajib ada di data lama)
+    debitAirBaku?: number | '';      // L/dtk (Khusus WTP Gravitasi)
+    tekananPompa?: number | '';      // bar
+    wmProduksiAwal?: number | '';    // m³
+    wmProduksiAkhir?: number | '';   // m³
+    wmDistribusiAwal?: number | '';  // m³
+    wmDistribusiAkhir?: number | ''; // m³
+    // Produksi (dihitung otomatis: wmProduksiAkhir - wmProduksiAwal)
+    volumeProduksi?: number | '';    // m³ — Volume Produksi
+    // digunakan sebagai debit produksi (volume / 3.6 / 2)
+    ampere?: number | '';            // A
+    voltase?: number | '';           // V
+    sisaChlor?: number | '';         // mg/L
+    dosisKaporit?: number | '';      // ppm
+    // Distribusi (dihitung otomatis: wmDistribusiAkhir - wmDistribusiAwal)
+    volumeDistribusi?: number | '';  // m³ — Volume Distribusi
+    debitDistribusi?: number | '';   // L/dtk — Debit Distribusi (volumeDistribusi / 3.6 / 2)
 
     catatan: string;
     foto?: string;  // URL Cloudinary
@@ -102,6 +175,7 @@ export interface LaporanMingguan {
     tanggalAkhir: string;   // YYYY-MM-DD (Minggu)
     operatorId: string;
     operatorNama: string;
+    operatorCabang?: string; // cabang operator (untuk filter admin)
     createdAt: string;
 
     // Pemakaian bahan kimia (kg)
@@ -113,6 +187,22 @@ export interface LaporanMingguan {
     sisaPAC: number | '';
     sisaKaporit: number | '';
     sisaPolimer: number | '';
+
+    catatan: string;
+}
+
+/** Data kelistrikan harian — diisi sekali per hari jam 08:00, khusus Operator WTP */
+export interface CatatanListrik {
+    id: string;
+    tanggal: string;        // YYYY-MM-DD
+    operatorId: string;
+    operatorNama: string;
+    cabang?: string;
+    createdAt: string;
+
+    wbp: number | '';       // kWh — Waktu Beban Puncak
+    lwbp: number | '';      // kWh — Luar Waktu Beban Puncak
+    kvarh: number | '';     // kVARh
 
     catatan: string;
 }

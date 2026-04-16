@@ -5,7 +5,7 @@ import { getSession, login as storageLogin, clearSession } from './storage';
 
 interface AuthContextType {
     user: User | null;
-    login: (username: string, password: string) => Promise<boolean>;
+    login: (username: string) => Promise<boolean>;
     logout: () => void;
     isLoading: boolean;
 }
@@ -26,10 +26,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
     }, []);
 
-    const login = async (username: string, password: string): Promise<boolean> => {
+    const login = async (username: string): Promise<boolean> => {
         setIsLoading(true);
         try {
-            const u = await storageLogin(username, password);
+            const u = await storageLogin(username);
             if (u) { 
                 setUser(u); 
                 return true; 

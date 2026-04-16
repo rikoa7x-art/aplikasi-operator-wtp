@@ -19,7 +19,11 @@ export async function uploadToCloudinary(dataUrl: string): Promise<string> {
     }
 
     const formData = new FormData();
-    formData.append('file', dataUrl);               // base64 dataURL
+    // Convert base64 dataUrl ke Blob agar lebih aman untuk mobile upload
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    
+    formData.append('file', blob, 'upload.jpg');
     formData.append('upload_preset', UPLOAD_PRESET);
     formData.append('folder', 'wtp-laporan');       // disimpan di folder wtp-laporan
 

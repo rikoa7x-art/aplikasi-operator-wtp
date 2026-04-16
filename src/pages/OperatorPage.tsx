@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../AuthContext';
-import { getCatatan, deleteCatatan, getMingguan, deleteMingguan } from '../storage';
-import type { CatatanWaktu, LaporanMingguan } from '../types';
-import { SLOTS, getHariOperasi, getCurrentSlot, getCurrentWeekRange } from '../types';
+import { getCatatanByOperator, deleteCatatan, getMingguanByOperator, deleteMingguan, getCatatanListrikByOperator, deleteCatatanListrik } from '../storage';
+import type { CatatanWaktu, LaporanMingguan, CatatanListrik } from '../types';
+import { SLOTS, getHariOperasi, getCurrentSlot, getCurrentWeekRange, getTipeOperatorLabel } from '../types';
 import FormCatatan from '../components/FormLaporan';
 import DetailCatatan from '../components/DetailLaporan';
 import FormMingguan from '../components/FormMingguan';
+import FormListrik from '../components/FormListrik';
 
 type View = 'grid' | 'mingguan' | 'riwayat';
 type Modal =
@@ -13,6 +14,8 @@ type Modal =
     | { type: 'detail2jam'; catatan: CatatanWaktu }
     | { type: 'formMingguan'; existing?: LaporanMingguan }
     | { type: 'detailMingguan'; data: LaporanMingguan }
+    | { type: 'formListrik'; existing?: CatatanListrik }
+    | { type: 'detailListrik'; data: CatatanListrik }
     | null;
 
 /* ── NTU color helpers ───────────────────────────────────────── */
@@ -34,9 +37,13 @@ function ChemBadge({ label, value, color }: { label: string; value: number | str
 
 export default function OperatorPage() {
     const { user, logout } = useAuth();
+    const isWTP = user?.tipeOperator === 'operator_wtp';
+    const uCabang = (user?.cabang || '').trim().toLowerCase();
+    const isGravitasi = uCabang === 'subang' || uCabang === 'tanjungsiang';
     const [view, setView] = useState<View>('grid');
     const [semua, setSemua] = useState<CatatanWaktu[]>([]);
     const [mingguanList, setMingguanList] = useState<LaporanMingguan[]>([]);
+    const [listrikList, setListrikList] = useState<CatatanListrik[]>([]);
     const [modal, setModal] = useState<Modal>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -44,20 +51,30 @@ export default function OperatorPage() {
     const currentSlot = getCurrentSlot();
     const weekInfo = getCurrentWeekRange();
 
-    const reload = async () => {
+    // Listrik hari ini
+    const listrikHariIni = listrikList.find(l => l.tanggal === hariOperasi);
+
+    const reload = useCallback(async () => {
         setIsLoading(true);
         try {
-            const cat = await getCatatan();
-            setSemua(cat.filter(c => c.operatorId === user!.id));
-            const ming = await getMingguan();
-            setMingguanList(ming.filter(m => m.operatorId === user!.id));
+            // Gunakan filtered queries — hanya download data milik operator ini
+            const [cat, ming] = await Promise.all([
+                getCatatanByOperator(user!.id),
+                getMingguanByOperator(user!.id),
+            ]);
+            setSemua(cat);
+            setMingguanList(ming);
+            if (isWTP) {
+                const listrik = await getCatatanListrikByOperator(user!.id);
+                setListrikList(listrik);
+            }
         } catch (err) {
             console.error(err);
         } finally {
             setIsLoading(false);
         }
-    };
-    useEffect(() => { reload(); }, []);
+    }, [user, isWTP]);
+    useEffect(() => { reload(); }, [reload]);
 
     const hari = semua.filter(c => c.tanggal === hariOperasi);
     const slotMap = new Map(hari.map(c => [c.slot, c]));
@@ -133,17 +150,44 @@ export default function OperatorPage() {
                     </div>
                     <div>
                         <p className="text-white font-semibold text-sm leading-tight">{user?.nama}</p>
-                        <p className="text-xs mt-0.5 font-medium text-grad-blue">Operator WTP</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                            {user?.tipeOperator ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                                    style={user.tipeOperator === 'operator_wtp'
+                                        ? { background: 'rgba(14,116,144,0.2)', color: '#22d3ee', border: '1px solid rgba(34,211,238,0.25)' }
+                                        : { background: 'rgba(124,58,237,0.2)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.25)' }}>
+                                    {user.tipeOperator === 'operator_wtp' ? '🏭' : '💧'} {getTipeOperatorLabel(user.tipeOperator, user.cabang)}
+                                </span>
+                            ) : (
+                                <span className="text-xs mt-0.5 font-medium text-grad-blue">Operator WTP</span>
+                            )}
+                            {user?.cabang && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                                    style={{ background: 'rgba(245,158,11,0.12)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.2)' }}>
+                                    📍 {user.cabang}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
-                <button onClick={logout}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-400 text-xs font-medium transition active:scale-95"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
-                    </svg>
-                    Keluar
-                </button>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => reload()}
+                        className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 transition active:scale-95"
+                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                        title="Refresh data">
+                        <svg className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                    <button onClick={logout}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-400 text-xs font-medium transition active:scale-95"
+                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
+                        </svg>
+                        Keluar
+                    </button>
+                </div>
             </header>
 
             {/* ── Main ──────────────────────────────────────────── */}
@@ -200,6 +244,48 @@ export default function OperatorPage() {
                                 </div>
                             </div>
                         </div>
+
+                    {/* ── Kartu Listrik Harian (hanya WTP yang menggunakan Pompa) ───── */}
+                        {isWTP && !isGravitasi && (
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">⚡ Listrik Harian</p>
+                                <button
+                                    onClick={() => listrikHariIni
+                                        ? setModal({ type: 'detailListrik', data: listrikHariIni })
+                                        : setModal({ type: 'formListrik' })}
+                                    className="w-full text-left rounded-2xl p-4 transition active:scale-[0.98] relative overflow-hidden"
+                                    style={listrikHariIni
+                                        ? { background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)' }
+                                        : { background: 'rgba(255,255,255,0.03)', border: '2px dashed rgba(234,179,8,0.2)' }}>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                                            style={{ background: listrikHariIni ? 'rgba(234,179,8,0.15)' : 'rgba(99,130,200,0.1)', border: '1px solid rgba(234,179,8,0.2)' }}>
+                                            <span className="text-lg">{listrikHariIni ? '⚡' : '➕'}</span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            {listrikHariIni ? (
+                                                <>
+                                                    <p className="text-white font-semibold text-sm">Data Listrik Tercatat</p>
+                                                    <p className="text-yellow-400 text-xs mt-0.5">
+                                                        WBP: {listrikHariIni.wbp !== '' ? `${listrikHariIni.wbp} kWh` : '–'} &nbsp;·&nbsp;
+                                                        LWBP: {listrikHariIni.lwbp !== '' ? `${listrikHariIni.lwbp} kWh` : '–'} &nbsp;·&nbsp;
+                                                        KVARH: {listrikHariIni.kvarh !== '' ? `${listrikHariIni.kvarh} kVARh` : '–'}
+                                                    </p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <p className="text-slate-400 font-medium text-sm">Input Listrik Harian</p>
+                                                    <p className="text-slate-600 text-xs mt-0.5">WBP · LWBP · KVARH — belum diisi</p>
+                                                </>
+                                            )}
+                                        </div>
+                                        <svg className="w-4 h-4 text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </div>
+                                </button>
+                            </div>
+                        )}
 
                         {/* Slot grid */}
                         <div className="grid grid-cols-3 gap-2.5 stagger-children">
@@ -430,7 +516,7 @@ export default function OperatorPage() {
                         const active = view === t.key;
                         return (
                             <button key={t.key}
-                                onClick={() => { setView(t.key); reload(); }}
+                                onClick={() => setView(t.key)}
                                 className="flex-1 flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl transition-all active:scale-95 relative"
                                 style={active ? { background: t.glowColor, boxShadow: `0 0 12px ${t.glowColor}` } : {}}>
                                 {t.icon(active)}
@@ -479,6 +565,53 @@ export default function OperatorPage() {
                         {modal.type === 'formMingguan' && (
                             <FormMingguan existing={modal.existing}
                                 onSuccess={() => { reload(); setModal(null); }} onCancel={() => setModal(null)} />
+                        )}
+
+                        {modal.type === 'formListrik' && (
+                            <FormListrik existing={modal.existing}
+                                onSuccess={() => { reload(); setModal(null); }} onCancel={() => setModal(null)} />
+                        )}
+
+                        {modal.type === 'detailListrik' && (
+                            <div>
+                                <p className="font-display font-bold text-white text-2xl mb-1">⚡ Listrik Harian</p>
+                                <p className="text-slate-400 text-sm mb-4">
+                                    {new Date(modal.data.tanggal + 'T08:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                </p>
+                                <div className="rounded-2xl p-4 space-y-1 mb-3" style={{ background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)' }}>
+                                    {[{ l: 'WBP', v: modal.data.wbp, u: 'kWh' }, { l: 'LWBP', v: modal.data.lwbp, u: 'kWh' }, { l: 'KVARH', v: modal.data.kvarh, u: 'kVARh' }].map(r => (
+                                        <div key={r.l} className="flex justify-between py-2.5 border-b last:border-0" style={{ borderColor: 'rgba(234,179,8,0.1)' }}>
+                                            <span className="text-slate-400 text-sm">{r.l}</span>
+                                            <span className="text-yellow-300 font-bold text-sm">{r.v !== '' ? `${r.v} ${r.u}` : '–'}</span>
+                                        </div>
+                                    ))}
+                                    {(modal.data.wbp !== '' && modal.data.lwbp !== '') && (
+                                        <div className="flex justify-between pt-2.5">
+                                            <span className="text-slate-500 text-xs">Total WBP + LWBP</span>
+                                            <span className="text-blue-300 font-bold text-xs">{(Number(modal.data.wbp) + Number(modal.data.lwbp)).toFixed(2)} kWh</span>
+                                        </div>
+                                    )}
+                                </div>
+                                {modal.data.catatan && <p className="text-sm text-slate-400 italic mb-4">"{modal.data.catatan}"</p>}
+                                <button onClick={() => setModal({ type: 'formListrik', existing: modal.data })}
+                                    className="w-full py-3.5 text-sm font-semibold rounded-2xl transition active:scale-[0.98] mb-2"
+                                    style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.2)', color: '#fbbf24' }}>
+                                    Edit Data Listrik
+                                </button>
+                                <button onClick={async () => {
+                                    if (!confirm('Hapus data listrik ini?')) return;
+                                    await deleteCatatanListrik(modal.data.id);
+                                    reload(); setModal(null);
+                                }} className="w-full py-3 text-sm rounded-2xl transition"
+                                    style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.18)', color: '#f87171' }}>
+                                    Hapus
+                                </button>
+                                <button onClick={() => setModal(null)}
+                                    className="w-full py-3.5 text-slate-300 font-medium rounded-2xl transition text-sm mt-2"
+                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(99,130,200,0.15)' }}>
+                                    Tutup
+                                </button>
+                            </div>
                         )}
 
                         {modal.type === 'detailMingguan' && (
