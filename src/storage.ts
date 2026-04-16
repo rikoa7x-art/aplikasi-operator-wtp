@@ -111,17 +111,30 @@ export async function getUsers(): Promise<User[]> {
             firestoreUsers = snap.docs.map((d: any) => d.data() as User);
         }
 
-        // Auto-sync missing or updated default users (e.g. if new users added or tipeOperator changed)
+        // Auto-sync: pastikan semua field user selalu up-to-date dari defaultUsers
+        // Penting: sync cabang, tipeOperator, dan id agar filter admin bekerja dengan benar
         for (const du of defaultUsers) {
             const existingMatch = firestoreUsers.find(u => u.username === du.username);
             if (!existingMatch) {
+                // User baru — tambahkan ke Firestore
                 await setDoc(doc(db!, 'users', du.id), du);
                 firestoreUsers.push(du);
-            } else if (existingMatch.tipeOperator !== du.tipeOperator) {
-                // update if role changed in default list
-                const updated = { ...existingMatch, tipeOperator: du.tipeOperator };
-                await setDoc(doc(db!, 'users', existingMatch.id), updated);
-                Object.assign(existingMatch, updated);
+            } else {
+                // Cek apakah ada field yang perlu diupdate
+                const needsUpdate =
+                    existingMatch.tipeOperator !== du.tipeOperator ||
+                    existingMatch.cabang !== du.cabang ||
+                    !existingMatch.cabang; // cabang kosong/undefined = pasti perlu diupdate
+                if (needsUpdate) {
+                    const updated: User = {
+                        ...existingMatch,
+                        tipeOperator: du.tipeOperator,
+                        cabang: du.cabang,     // pastikan cabang selalu benar
+                        id: existingMatch.id,  // pertahankan id asli
+                    };
+                    await setDoc(doc(db!, 'users', existingMatch.id), updated);
+                    Object.assign(existingMatch, updated);
+                }
             }
         }
         
