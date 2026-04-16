@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -11,13 +11,16 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase only if the config is not completely empty
-let app;
-let db: ReturnType<typeof getFirestore> | null = null;
+let db: ReturnType<typeof initializeFirestore> | null = null;
 
 try {
     if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'your_api_key') {
-        app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
+        const app = initializeApp(firebaseConfig);
+        // ignoreUndefinedProperties: Firestore mengabaikan field undefined
+        // sehingga tidak throw error saat ada field yang tidak diset
+        db = initializeFirestore(app, {
+            ignoreUndefinedProperties: true,
+        });
     }
 } catch (error) {
     console.error('Error initializing Firebase:', error);
